@@ -157,7 +157,267 @@
         gap: 10px;
         align-items: center;
     }
+    
+    /* Resource Manager Styles */
+    .resource-manager {
+        background: #1e1e1e;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 30px;
+        color: #d4d4d4;
+    }
+    
+    .resource-content {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+        position: relative;
+        width: 100%;
+        /* Auto-size based on content, no fixed height */
+        height: auto;
+        min-height: auto;
+        overflow: visible;
+    }
+    
+    /* External container (console-content) - full height, no scroll */
+    #resources-content.console-content:not(.collapsed) {
+        overflow: visible;
+    }
+    
+    /* External container (traffic-content) - full height, no scroll */
+    #traffic-content.console-content:not(.collapsed) {
+        overflow: visible;
+    }
+    
+    .resource-content::-webkit-scrollbar {
+        width: 10px;
+    }
+    
+    .resource-content::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .resource-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 5px;
+    }
+    
+    .resource-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+    
+    
+    .resource-chart-container {
+        background: #252526;
+        border-radius: 8px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    /* Fixed size for donut charts (Memory and Disk) */
+    #resource-content-area > .resource-chart-container:not([style*="grid-column"]) {
+        width: 500px;
+        height: auto;
+        min-width: 500px;
+        min-height: 700px;
+        max-width: 500px;
+        /* Height auto allows stats grid to fit below chart */
+    }
+    
+    /* Fixed size for network chart (full width) - auto height to fit stats */
+    #resource-content-area > .resource-chart-container[style*="grid-column"] {
+        width: 100%;
+        min-width: 1020px; /* 500px + 500px + 20px gap */
+        height: auto;
+        min-height: 600px;
+    }
+    
+    /* Override for overall traffic stats - should only fit content */
+    #traffic-overall-stats-container.resource-chart-container {
+        min-height: auto;
+        height: auto;
+        padding: 15px 20px;
+    }
+    
+    #traffic-overall-stats-container .resource-chart-title {
+        margin-bottom: 10px;
+    }
+    
+    .resource-chart-title {
+        font-size: 1.1em;
+        font-weight: bold;
+        margin-bottom: 15px;
+        color: #ffffff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .resource-chart-title span {
+        color: #ffffff;
+    }
+    
+    .resource-chart-value {
+        font-size: 0.9em;
+        color: #d4d4d4;
+        font-weight: normal;
+    }
+    
+    .resource-chart-canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+    
+    /* Fixed canvas sizes for donut charts */
+    #memory-chart.resource-chart-canvas,
+    #disk-chart.resource-chart-canvas {
+        width: 460px !important; /* 500px container - 40px padding */
+        height: 460px !important;
+        min-width: 460px !important;
+        min-height: 460px !important;
+        max-width: 460px !important;
+        max-height: 460px !important;
+    }
+    
+    /* Fixed canvas size for network bar chart */
+    #network-chart.resource-chart-canvas {
+        width: 100% !important;
+        height: 400px !important;
+        min-height: 400px !important;
+        max-height: 400px !important;
+    }
+    
+    /* Fixed sizes for traffic analytics charts */
+    /* Daily Visits and Hourly Distribution (line/bar charts) */
+    #traffic-content-area > .resource-chart-container:not([style*="grid-column"]):not(#traffic-overall-stats-container) {
+        width: 500px;
+        height: auto;
+        min-width: 500px;
+        min-height: 500px;
+        max-width: 500px;
+    }
+    
+    /* Daily Visits Chart */
+    #daily-visits-chart.resource-chart-canvas {
+        width: 460px !important;
+        height: 350px !important;
+        min-width: 460px !important;
+        min-height: 350px !important;
+        max-width: 460px !important;
+        max-height: 350px !important;
+    }
+    
+    /* Hourly Distribution Chart */
+    #hourly-distribution-chart.resource-chart-canvas {
+        width: 460px !important;
+        height: 350px !important;
+        min-width: 460px !important;
+        min-height: 350px !important;
+        max-width: 460px !important;
+        max-height: 350px !important;
+    }
+    
+    /* Countries and Referrers (doughnut charts) */
+    #countries-chart.resource-chart-canvas,
+    #referrers-chart.resource-chart-canvas {
+        width: 460px !important;
+        height: 460px !important;
+        min-width: 460px !important;
+        min-height: 460px !important;
+        max-width: 460px !important;
+        max-height: 460px !important;
+    }
+    
+    /* Apps Breakdown Chart (bar chart, full width) */
+    #traffic-content-area > .resource-chart-container[style*="grid-column"]:not(#traffic-overall-stats-container) {
+        width: 100%;
+        min-width: 1020px; /* 500px + 500px + 20px gap */
+        height: auto;
+        min-height: 500px;
+    }
+    
+    #apps-breakdown-chart.resource-chart-canvas {
+        width: 100% !important;
+        height: 400px !important;
+        min-height: 400px !important;
+        max-height: 400px !important;
+    }
+    
+    .resource-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 15px;
+        font-size: 0.9em;
+        flex-shrink: 0; /* Prevent stats from shrinking */
+    }
+    
+    /* Ensure donut chart containers have proper spacing for stats */
+    #resource-content-area > .resource-chart-container:not([style*="grid-column"]) .resource-stats-grid {
+        margin-top: 20px;
+        padding-top: 15px;
+    }
+    
+    /* Network chart container needs space for stats below */
+    #resource-content-area > .resource-chart-container[style*="grid-column"] {
+        padding-bottom: 20px;
+    }
+    
+    /* Ensure network stats grid fits within container */
+    #resource-content-area > .resource-chart-container[style*="grid-column"] .resource-stats-grid {
+        margin-top: 20px;
+        padding-bottom: 10px;
+    }
+    
+    .resource-stat-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+    }
+    
+    .resource-stat-label {
+        color: #808080;
+    }
+    
+    .resource-stat-value {
+        color: #d4d4d4;
+        font-weight: bold;
+    }
+    
+    /* Traffic filter checkbox styling */
+    .traffic-filter-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        color: #d4d4d4;
+        font-size: 0.9em;
+        user-select: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+    
+    .traffic-filter-checkbox:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .traffic-filter-checkbox input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: #667eea;
+    }
+    
+    .traffic-filter-checkbox span {
+        white-space: nowrap;
+    }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -170,36 +430,7 @@
         </div>
     </header>
     
-    <!-- Ports Console -->
-    <div class="ports-console">
-        <div class="console-header collapsed" onclick="toggleConsole('ports')">
-            <h2><span class="chevron">▶</span>Active Ports Console</h2>
-            <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshPortsConsole()">🔄 Refresh</button>
-            </div>
-        </div>
-        <div id="ports-console-content" class="console-content collapsed">
-            <p style="color: #808080; text-align: center; padding: 20px;">Loading active ports...</p>
-        </div>
-    </div>
-    
-    <!-- Terminal Console -->
-    <div class="terminal-console">
-        <div class="console-header collapsed" onclick="toggleConsole('terminal')">
-            <h2><span class="chevron">▶</span>Server Terminal</h2>
-            <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); clearTerminal()">🗑️ Clear</button>
-            </div>
-        </div>
-        <div id="terminal-content" class="terminal-content collapsed">
-            <div id="terminal-output" class="terminal-output"></div>
-            <div class="terminal-input-line">
-                <span class="terminal-prompt" id="terminal-prompt-display">~$</span>
-                <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false" placeholder="Type a command and press Enter...">
-            </div>
-        </div>
-    </div>
-    
+    <!-- Configured Applications -->
     <div class="apps-list">
         <div class="apps-list-header">
             <h2>Configured Applications</h2>
@@ -210,6 +441,16 @@
             {% for app in apps %}
             <div class="app-row" data-app-id="{{ app.id }}">
                 <div class="app-row-content">
+                    <div class="app-serve-checkbox">
+                        <label class="checkbox-label">
+                            <input type="checkbox" 
+                                   class="serve-app-checkbox" 
+                                   data-app-id="{{ app.id }}" 
+                                   {% if app.get('serve_app', True) %}checked{% endif %}
+                                   onchange="toggleServeApp('{{ app.id }}', this.checked)">
+                            <span>Serve App</span>
+                        </label>
+                    </div>
                     <div class="app-info">
                         {% if app.logo %}
                             <img src="{{ url_for('admin.uploaded_file', filename=app.logo) }}" alt="{{ app.name }}" class="logo-preview">
@@ -243,6 +484,195 @@
                 <p>No apps configured. Click "Add App" to get started.</p>
             </div>
             {% endif %}
+        </div>
+    </div>
+    
+    <!-- Admin Tools Section -->
+    <div style="margin-top: 40px; margin-bottom: 20px;">
+        <h2 style="color: #d4d4d4; font-size: 1.8em; font-weight: 600; border-bottom: 2px solid #667eea; padding-bottom: 10px;">Admin Tools</h2>
+    </div>
+    
+    <!-- Ports Console -->
+    <div class="ports-console">
+        <div class="console-header collapsed" onclick="toggleConsole('ports')">
+            <h2><span class="chevron">▶</span>Active Ports Console</h2>
+            <div class="header-actions-group">
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshPortsConsole()">🔄 Refresh</button>
+            </div>
+        </div>
+        <div id="ports-console-content" class="console-content collapsed">
+            <p style="color: #808080; text-align: center; padding: 20px;">Loading active ports...</p>
+        </div>
+    </div>
+    
+    <!-- Terminal Console -->
+    <div class="terminal-console">
+        <div class="console-header collapsed" onclick="toggleConsole('terminal')">
+            <h2><span class="chevron">▶</span>Server Terminal</h2>
+            <div class="header-actions-group">
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); clearTerminal()">🗑️ Clear</button>
+            </div>
+        </div>
+        <div id="terminal-content" class="terminal-content collapsed">
+            <div id="terminal-output" class="terminal-output"></div>
+            <div class="terminal-input-line">
+                <span class="terminal-prompt" id="terminal-prompt-display">~$</span>
+                <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false" placeholder="Type a command and press Enter...">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Resource Manager -->
+    <div class="resource-manager">
+        <div class="console-header collapsed" onclick="toggleConsole('resources')">
+            <h2><span class="chevron">▶</span>Resource Manager</h2>
+            <div class="header-actions-group">
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshResourceStats()">🔄 Refresh</button>
+            </div>
+        </div>
+        <div id="resources-content" class="console-content collapsed">
+            <div class="resource-content" id="resource-content-area">
+                <!-- Memory Chart -->
+                <div class="resource-chart-container">
+                    <div class="resource-chart-title">
+                        <span>Memory Usage</span>
+                    </div>
+                    <div style="position: relative;">
+                        <canvas id="memory-chart" class="resource-chart-canvas"></canvas>
+                        <div id="memory-center-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
+                            <div style="font-size: 2.5em; font-weight: bold; color: #d4d4d4; line-height: 1.2;">0%</div>
+                            <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(0 GB / 0 GB)</div>
+                        </div>
+                    </div>
+                    <div class="resource-stats-grid" id="memory-stats"></div>
+                </div>
+                
+                <!-- Disk Chart -->
+                <div class="resource-chart-container">
+                    <div class="resource-chart-title">
+                        <span>Disk Usage</span>
+                    </div>
+                    <div style="position: relative;">
+                        <canvas id="disk-chart" class="resource-chart-canvas"></canvas>
+                        <div id="disk-center-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
+                            <div style="font-size: 2.5em; font-weight: bold; color: #d4d4d4; line-height: 1.2;">0%</div>
+                            <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(0 GB / 0 GB)</div>
+                        </div>
+                    </div>
+                    <div class="resource-stats-grid" id="disk-stats"></div>
+                </div>
+                
+                <!-- Network Chart -->
+                <div class="resource-chart-container" style="grid-column: 1 / -1;">
+                    <div class="resource-chart-title">
+                        <span>Network Statistics</span>
+                        <span class="resource-chart-value" id="network-value">Loading...</span>
+                    </div>
+                    <canvas id="network-chart" class="resource-chart-canvas"></canvas>
+                    <div class="resource-stats-grid" id="network-stats"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Traffic Manager -->
+    <div class="resource-manager">
+        <div class="console-header collapsed" onclick="toggleConsole('traffic')">
+            <h2><span class="chevron">▶</span>Traffic Analytics</h2>
+            <div class="header-actions-group">
+                <label class="traffic-filter-checkbox" onclick="event.stopPropagation();">
+                    <input type="checkbox" id="include-local-checkbox" checked onchange="handleIncludeLocalChange()">
+                    <span>Include LastTerminal</span>
+                </label>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshTrafficStats()">🔄 Refresh</button>
+            </div>
+        </div>
+        <div id="traffic-content" class="console-content collapsed">
+            <div class="resource-content" id="traffic-content-area">
+                <!-- Overall Statistics -->
+                <div id="traffic-overall-stats-container" class="resource-chart-container" style="grid-column: 1 / -1;">
+                    <div class="resource-chart-title">
+                        <span>Overall Traffic Statistics</span>
+                        <span class="resource-chart-value" id="traffic-overall-value">Loading...</span>
+                    </div>
+                    <div class="resource-stats-grid" id="traffic-overall-stats" style="grid-template-columns: repeat(4, 1fr);"></div>
+                </div>
+                
+                <!-- Daily Visits Chart -->
+                <div class="resource-chart-container">
+                    <div class="resource-chart-title">
+                        <span>Daily Visits (Last 30 Days)</span>
+                        <span class="resource-chart-value" id="daily-visits-value">Loading...</span>
+                    </div>
+                    <canvas id="daily-visits-chart" class="resource-chart-canvas"></canvas>
+                </div>
+                
+                <!-- Hourly Distribution Chart -->
+                <div class="resource-chart-container">
+                    <div class="resource-chart-title">
+                        <span>Hourly Distribution (Today)</span>
+                        <span class="resource-chart-value" id="hourly-distribution-value">Loading...</span>
+                    </div>
+                    <canvas id="hourly-distribution-chart" class="resource-chart-canvas"></canvas>
+                </div>
+                
+                <!-- Top Countries Chart -->
+                <div class="resource-chart-container">
+                    <div class="resource-chart-title">
+                        <span>Top Countries</span>
+                        <span class="resource-chart-value" id="countries-value">Loading...</span>
+                    </div>
+                    <canvas id="countries-chart" class="resource-chart-canvas"></canvas>
+                </div>
+                
+                <!-- Top Referrers Chart -->
+                <div class="resource-chart-container">
+                    <div class="resource-chart-title">
+                        <span>Top Referrers</span>
+                        <span class="resource-chart-value" id="referrers-value">Loading...</span>
+                    </div>
+                    <canvas id="referrers-chart" class="resource-chart-canvas"></canvas>
+                </div>
+                
+                <!-- Per-App Breakdown -->
+                <div class="resource-chart-container" style="grid-column: 1 / -1;">
+                    <div class="resource-chart-title">
+                        <span>Traffic by Application</span>
+                        <span class="resource-chart-value" id="apps-breakdown-value">Loading...</span>
+                    </div>
+                    <canvas id="apps-breakdown-chart" class="resource-chart-canvas"></canvas>
+                    <div class="resource-stats-grid" id="apps-breakdown-stats" style="grid-template-columns: repeat(3, 1fr); margin-top: 15px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Admin Login Tracking -->
+    <div class="resource-manager">
+        <div class="console-header collapsed" onclick="toggleConsole('admin-logins')">
+            <h2><span class="chevron">▶</span>Admin Login History</h2>
+            <div class="header-actions-group">
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshAdminLogins()">🔄 Refresh</button>
+            </div>
+        </div>
+        <div id="admin-logins-content" class="console-content collapsed">
+            <div class="console-content" style="max-height: none; padding: 15px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #3e3e3e; color: #569cd6;">IP Address</th>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #3e3e3e; color: #569cd6;">Location</th>
+                            <th style="text-align: right; padding: 10px; border-bottom: 1px solid #3e3e3e; color: #569cd6;">Logins</th>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #3e3e3e; color: #569cd6;">Last Login</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-logins-table-body">
+                        <tr>
+                            <td colspan="4" style="padding: 20px; text-align: center; color: #808080;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -282,6 +712,17 @@
             </div>
             
             <div class="form-group">
+                <label for="app-folder-path">App Folder (optional)</label>
+                <select id="app-folder-path" name="folder_path" style="width: 100%; padding: 8px; border-radius: 4px; background: #252526; color: #d4d4d4; border: 1px solid rgba(255,255,255,0.1);">
+                    <option value="">-- Select folder in /opt --</option>
+                </select>
+                <small>
+                    Select the folder in /opt that contains this app's files. Used for disk usage tracking.
+                    <button type="button" class="btn btn-secondary" onclick="refreshOptFolders()" style="margin-top: 5px; padding: 4px 8px; font-size: 0.85em;">🔄 Refresh Folders</button>
+                </small>
+            </div>
+            
+            <div class="form-group">
                 <label for="app-logo">Logo (optional)</label>
                 <input type="file" id="app-logo" name="logo" accept="image/*">
                 <div id="logo-preview-container"></div>
@@ -313,6 +754,37 @@
 <script>
 let currentEditingId = null;
 
+async function refreshOptFolders() {
+    try {
+        const response = await fetch('/admin/api/opt-folders');
+        const result = await response.json();
+        
+        const select = document.getElementById('app-folder-path');
+        if (!select) return;
+        
+        // Clear existing options except the first one
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+        
+        if (result.success && result.folders && result.folders.length > 0) {
+            result.folders.forEach(folder => {
+                const option = document.createElement('option');
+                option.value = folder;
+                option.textContent = folder;
+                select.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No folders found in /opt';
+            select.appendChild(option);
+        }
+    } catch (error) {
+        console.error('Error loading /opt folders:', error);
+    }
+}
+
 function showAddModal(port = null, serviceName = null) {
     currentEditingId = null;
     document.getElementById('modal-title').textContent = 'Add Application';
@@ -328,6 +800,9 @@ function showAddModal(port = null, serviceName = null) {
         document.getElementById('app-service-name').value = serviceName;
     }
     
+    // Load /opt folders
+    refreshOptFolders();
+    
     document.getElementById('app-modal').style.display = 'block';
 }
 
@@ -339,25 +814,29 @@ function editApp(appId) {
     currentEditingId = appId;
     document.getElementById('modal-title').textContent = 'Edit Application';
     
-    // Fetch app data
-    fetch(`/admin/api/apps`)
-        .then(r => r.json())
-        .then(data => {
-            const app = data.apps.find(a => a.id === appId);
-            if (app) {
-                document.getElementById('app-id').value = app.id;
-                document.getElementById('app-name').value = app.name;
-                document.getElementById('app-port').value = app.port;
-                document.getElementById('app-service-name').value = app.service_name || '';
-                
-                if (app.logo) {
-                    document.getElementById('logo-preview-container').innerHTML = 
-                        `<img src="/admin/uploads/${app.logo}" class="logo-preview" style="margin-top: 10px;">`;
+    // Load /opt folders first
+    refreshOptFolders().then(() => {
+        // Fetch app data
+        fetch(`/admin/api/apps`)
+            .then(r => r.json())
+            .then(data => {
+                const app = data.apps.find(a => a.id === appId);
+                if (app) {
+                    document.getElementById('app-id').value = app.id;
+                    document.getElementById('app-name').value = app.name;
+                    document.getElementById('app-port').value = app.port;
+                    document.getElementById('app-service-name').value = app.service_name || '';
+                    document.getElementById('app-folder-path').value = app.folder_path || '';
+                    
+                    if (app.logo) {
+                        document.getElementById('logo-preview-container').innerHTML = 
+                            `<img src="/admin/uploads/${app.logo}" class="logo-preview" style="margin-top: 10px;">`;
+                    }
+                    
+                    document.getElementById('app-modal').style.display = 'block';
                 }
-                
-                document.getElementById('app-modal').style.display = 'block';
-            }
-        });
+            });
+    });
 }
 
 function closeModal() {
@@ -400,11 +879,19 @@ function showAlert(message, type = 'warning') {
     const existingAlerts = document.querySelectorAll('.alert-banner');
     existingAlerts.forEach(alert => alert.remove());
     
+    // Determine icon based on type
+    let icon = '⚠️';
+    if (type === 'success') {
+        icon = '✓';
+    } else if (type === 'error') {
+        icon = '⚠️';
+    }
+    
     // Create new alert
     const alert = document.createElement('div');
     alert.className = `alert-banner ${type}`;
     alert.innerHTML = `
-        <span class="alert-icon">${type === 'error' ? '⚠️' : '⚠️'}</span>
+        <span class="alert-icon">${icon}</span>
         <span class="alert-message">${message}</span>
         <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
     `;
@@ -462,8 +949,69 @@ async function refreshPortsConsole() {
 
 // Toggle console collapse/expand
 function toggleConsole(type) {
-    const header = document.querySelector(`.${type === 'ports' ? 'ports-console' : 'terminal-console'} .console-header`);
-    const content = document.getElementById(type === 'ports' ? 'ports-console-content' : 'terminal-content');
+    let header, content;
+    
+    if (type === 'ports') {
+        header = document.querySelector('.ports-console .console-header');
+        content = document.getElementById('ports-console-content');
+    } else if (type === 'terminal') {
+        header = document.querySelector('.terminal-console .console-header');
+        content = document.getElementById('terminal-content');
+    } else if (type === 'resources') {
+        header = document.querySelector('.resource-manager .console-header');
+        content = document.getElementById('resources-content');
+        // Initialize resource manager on first expand (with small delay to avoid blocking)
+        const wasCollapsed = header && header.classList.contains('collapsed');
+        if (wasCollapsed) {
+            // Small delay to avoid blocking UI, and only load if not already loaded
+            setTimeout(() => {
+                // Only load if section is now expanded and charts don't exist yet
+                if (header && !header.classList.contains('collapsed') && !memoryChart) {
+                    refreshResourceStats();
+                }
+            }, 100);
+        }
+    } else if (type === 'traffic') {
+        // Find the traffic section header (the one that contains "Traffic Analytics")
+        const allManagers = document.querySelectorAll('.resource-manager');
+        header = null;
+        for (let mgr of allManagers) {
+            const h = mgr.querySelector('.console-header');
+            if (h && h.textContent.includes('Traffic Analytics')) {
+                header = h;
+                break;
+            }
+        }
+        content = document.getElementById('traffic-content');
+        // Initialize traffic manager on first expand
+        if (header && header.classList.contains('collapsed')) {
+            setTimeout(() => {
+                if (!header.classList.contains('collapsed') && !dailyVisitsChart) {
+                    refreshTrafficStats();
+                }
+            }, 100);
+        }
+    } else if (type === 'admin-logins') {
+        // Find the admin logins section header (the one that contains "Admin Login History")
+        const allManagers = document.querySelectorAll('.resource-manager');
+        header = null;
+        for (let mgr of allManagers) {
+            const h = mgr.querySelector('.console-header');
+            if (h && h.textContent.includes('Admin Login History')) {
+                header = h;
+                break;
+            }
+        }
+        content = document.getElementById('admin-logins-content');
+        // Initialize admin logins on first expand
+        if (header && header.classList.contains('collapsed')) {
+            setTimeout(() => {
+                if (!header.classList.contains('collapsed')) {
+                    refreshAdminLogins();
+                }
+            }, 100);
+        }
+    }
     
     if (header && content) {
         const isCollapsed = header.classList.contains('collapsed');
@@ -482,6 +1030,7 @@ function toggleConsole(type) {
 document.addEventListener('DOMContentLoaded', () => {
     refreshPortsConsole();
     initializeTerminal();
+    // Resource manager will be initialized when expanded
 });
 
 // Terminal functionality
@@ -838,6 +1387,7 @@ document.getElementById('app-form').addEventListener('submit', async (e) => {
                 name: formData.get('name'),
                 port: parseInt(formData.get('port')),
                 service_name: formData.get('service_name') || null,
+                folder_path: formData.get('folder_path') || null,
                 logo: formData.get('logo') ? null : document.querySelector('#logo-preview-container img')?.src.split('/static/')[1] || null
             };
             
@@ -847,6 +1397,7 @@ document.getElementById('app-form').addEventListener('submit', async (e) => {
                 updateFormData.append('name', data.name);
                 updateFormData.append('port', data.port);
                 updateFormData.append('service_name', data.service_name || '');
+                updateFormData.append('folder_path', data.folder_path || '');
                 updateFormData.append('logo', formData.get('logo'));
                 
                 response = await fetch(`/admin/api/apps/${appId}`, {
@@ -1129,6 +1680,42 @@ async function restartApp(appId) {
     }
 }
 
+async function toggleServeApp(appId, checked) {
+    const checkbox = document.querySelector(`input.serve-app-checkbox[data-app-id="${appId}"]`);
+    
+    try {
+        const response = await fetch(`/admin/api/apps/${appId}/toggle-serve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            // Ensure checkbox state matches API response
+            if (checkbox) {
+                checkbox.checked = result.app.serve_app;
+            }
+            // Show a brief feedback message
+            const status = result.app.serve_app ? 'enabled' : 'disabled';
+            showAlert(`App serving ${status}`, 'success');
+        } else {
+            // Revert checkbox on error
+            if (checkbox) {
+                checkbox.checked = !checked;
+            }
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        // Revert checkbox on error
+        if (checkbox) {
+            checkbox.checked = !checked;
+        }
+        alert('Error toggling serve app: ' + error.message);
+    }
+}
+
 async function deleteApp(appId) {
     if (!confirm('Are you sure you want to delete this app? This cannot be undone.')) {
         return;
@@ -1216,6 +1803,1404 @@ async function detectServiceName() {
         detectBtn.textContent = originalText;
     }
 }
+
+// Resource Manager
+let memoryChart = null;
+let diskChart = null;
+let networkChart = null;
+let resourceStatsLoading = false;
+let lastResourceStatsCall = 0;
+const RESOURCE_STATS_THROTTLE_MS = 2000; // Minimum 2 seconds between calls
+
+
+
+// Helper function to generate colors using vibrant scheme (avoid white/light colors)
+function generateTrafficColor(index) {
+    // Use muted color palette (matching screenshot colors)
+    const mutedColors = [
+        '#c57c3c', // Orange/Brown
+        '#ab62c0', // Purple
+        '#72a555', // Green
+        '#ca5670', // Red/Pink
+        '#638ccc', // Blue
+        '#8b6f47', // Brown
+        '#9d7fb8', // Light Purple
+        '#5d8a3f', // Dark Green
+        '#b84a5f', // Dark Pink
+        '#4a6ba3'  // Dark Blue
+    ];
+    return mutedColors[index % mutedColors.length];
+}
+
+async function refreshResourceStats() {
+    // Throttle: prevent calls more frequently than every 2 seconds
+    const now = Date.now();
+    if (now - lastResourceStatsCall < RESOURCE_STATS_THROTTLE_MS) {
+        console.log('Resource stats refresh throttled');
+        return;
+    }
+    
+    // Prevent duplicate simultaneous requests
+    if (resourceStatsLoading) {
+        console.log('Resource stats already loading, skipping');
+        return;
+    }
+    
+    resourceStatsLoading = true;
+    lastResourceStatsCall = now;
+    
+    try {
+        const response = await fetch('/admin/api/resources');
+        
+        // Check if response is OK before parsing JSON
+        if (!response.ok) {
+            // Try to get error text for debugging
+            const errorText = await response.text();
+            console.error(`Failed to load resource stats: HTTP ${response.status}`, errorText.substring(0, 200));
+            
+            // Show user-friendly error message
+            const resourceArea = document.getElementById('resource-content-area');
+            if (resourceArea) {
+                resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
+                    <p>Error loading resource stats: HTTP ${response.status}</p>
+                    <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
+                </div>`;
+            }
+            return;
+        }
+        
+        // Check content type to ensure we're getting JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const errorText = await response.text();
+            console.error('Expected JSON but got:', contentType, errorText.substring(0, 200));
+            
+            // Show user-friendly error message
+            const resourceArea = document.getElementById('resource-content-area');
+            if (resourceArea) {
+                resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
+                    <p>Error: Server returned invalid response format</p>
+                    <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
+                </div>`;
+            }
+            return;
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            updateMemoryChart(result.memory, result.apps || [], result.appmanager || null, result.breakdown || null);
+            updateDiskChart(result.disk, result.apps || [], result.appmanager || null, result.breakdown || null);
+            updateNetworkChart(result.network);
+            
+            // Resize charts after update to ensure they fit the container
+            setTimeout(() => {
+                if (memoryChart) memoryChart.resize();
+                if (diskChart) diskChart.resize();
+                if (networkChart) networkChart.resize();
+            }, 100);
+        } else {
+            console.error('Failed to load resource stats:', result.error);
+            
+            // Show user-friendly error message
+            const resourceArea = document.getElementById('resource-content-area');
+            if (resourceArea) {
+                resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
+                    <p>Error loading resource stats: ${result.error || 'Unknown error'}</p>
+                    <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
+                </div>`;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading resource stats:', error);
+        
+        // Show user-friendly error message
+        const resourceArea = document.getElementById('resource-content-area');
+        if (resourceArea) {
+            resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
+                <p>Error loading resource stats: ${error.message || 'Network error'}</p>
+                <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
+            </div>`;
+        }
+    } finally {
+        resourceStatsLoading = false;
+    }
+}
+
+function updateMemoryChart(memory, apps, appmanager, breakdown) {
+    const ctx = document.getElementById('memory-chart');
+    if (!ctx) return;
+    
+    const usedPercent = memory.percent;
+    const freePercent = 100 - usedPercent;
+    
+    // Update center text
+    const centerText = document.getElementById('memory-center-text');
+    if (centerText) {
+        centerText.innerHTML = `
+            <div style="font-size: 2.5em; font-weight: bold; color: #d4d4d4; line-height: 1.2;">${usedPercent.toFixed(2)}%</div>
+            <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(${parseFloat(memory.used_gb).toFixed(2)} GB / ${parseFloat(memory.total_gb).toFixed(2)} GB)</div>
+        `;
+    }
+    
+    // Build breakdown data for the used portion
+    const labels = [];
+    const data = [];
+    const colors = [];
+    let colorIndex = 0;
+    
+    // Add mapped apps
+    apps.forEach(app => {
+        if (app.memory_percent > 0.1) { // Only show if > 0.1%
+            labels.push(app.app_name || `App ${app.port}`);
+            data.push(app.memory_percent);
+            colors.push(generateTrafficColor(colorIndex));
+            colorIndex++;
+        }
+    });
+    
+    // Add AppManager
+    if (appmanager && appmanager.memory_percent > 0.1) {
+        labels.push('AppManager');
+        data.push(appmanager.memory_percent);
+        colors.push(generateTrafficColor(colorIndex));
+        colorIndex++;
+    }
+    
+    // Add System
+    if (breakdown && breakdown.system && breakdown.system.memory_percent > 0.1) {
+        labels.push('System');
+        data.push(breakdown.system.memory_percent);
+        colors.push(generateTrafficColor(colorIndex));
+        colorIndex++;
+    }
+    
+    // Add Other
+    if (breakdown && breakdown.other && breakdown.other.memory_percent > 0.1) {
+        labels.push('Other');
+        data.push(breakdown.other.memory_percent);
+        colors.push(generateTrafficColor(colorIndex));
+        colorIndex++;
+    }
+    
+    // Calculate remaining used (if breakdown doesn't add up to 100%)
+    const breakdownTotal = data.reduce((sum, val) => sum + val, 0);
+    if (breakdownTotal < usedPercent && usedPercent - breakdownTotal > 0.1) {
+        labels.push('Unallocated');
+        data.push(usedPercent - breakdownTotal);
+        colors.push(generateTrafficColor(colorIndex));
+        colorIndex++;
+    }
+    
+    // Add free space
+    labels.push('Free');
+    data.push(freePercent);
+    colors.push('#252526'); // Dark background color
+    
+    // Update stats grid
+    let statsHtml = `
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Total:</span>
+            <span class="resource-stat-value">${parseFloat(memory.total_gb).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Used:</span>
+            <span class="resource-stat-value">${parseFloat(memory.used_gb).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Available:</span>
+            <span class="resource-stat-value">${parseFloat(memory.available_gb).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Free:</span>
+            <span class="resource-stat-value">${parseFloat(memory.free_gb).toFixed(2)} GB</span>
+        </div>
+    `;
+    
+    // Add breakdown details
+    apps.forEach(app => {
+        if (app.memory_percent > 0.1) {
+            statsHtml += `
+                <div class="resource-stat-item">
+                    <span class="resource-stat-label">${app.app_name}:</span>
+                    <span class="resource-stat-value">${parseFloat(app.memory_gb).toFixed(2)} GB (${app.memory_percent.toFixed(2)}%)</span>
+                </div>
+            `;
+        }
+    });
+    
+    if (appmanager && appmanager.memory_percent > 0.1) {
+        statsHtml += `
+            <div class="resource-stat-item">
+                <span class="resource-stat-label">AppManager:</span>
+                <span class="resource-stat-value">${parseFloat(appmanager.memory_gb).toFixed(2)} GB (${appmanager.memory_percent.toFixed(2)}%)</span>
+            </div>
+        `;
+    }
+    
+    if (breakdown) {
+        if (breakdown.system && breakdown.system.memory_percent > 0.1) {
+            statsHtml += `
+                <div class="resource-stat-item">
+                    <span class="resource-stat-label">System:</span>
+                    <span class="resource-stat-value">${parseFloat(breakdown.system.memory_gb).toFixed(2)} GB (${breakdown.system.memory_percent.toFixed(2)}%)</span>
+                </div>
+            `;
+        }
+        if (breakdown.other && breakdown.other.memory_percent > 0.1) {
+            statsHtml += `
+                <div class="resource-stat-item">
+                    <span class="resource-stat-label">Other:</span>
+                    <span class="resource-stat-value">${parseFloat(breakdown.other.memory_gb).toFixed(2)} GB (${breakdown.other.memory_percent.toFixed(2)}%)</span>
+                </div>
+            `;
+        }
+    }
+    
+    document.getElementById('memory-stats').innerHTML = statsHtml;
+    
+    if (memoryChart) {
+        memoryChart.destroy();
+    }
+    
+    memoryChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors,
+                borderColor: '#1e1e1e',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right',
+                    labels: {
+                        color: '#ffffff',
+                        padding: 10,
+                        font: {
+                            size: 11,
+                            color: '#ffffff'
+                        },
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => {
+                                    const value = data.datasets[0].data[i];
+                                    return {
+                                        text: `${label} (${value.toFixed(2)}%)`,
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        strokeStyle: data.datasets[0].borderColor,
+                                        lineWidth: data.datasets[0].borderWidth,
+                                        hidden: false,
+                                        index: i,
+                                        fontColor: '#ffffff',
+                                        color: '#ffffff'
+                                    };
+                                });
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = memory.total_gb;
+                            const gb = (value / 100) * total;
+                            return `${label}: ${value.toFixed(2)}% (${gb.toFixed(2)} GB)`;
+                        }
+                    }
+                }
+            },
+            animation: {
+                onComplete: function() {
+                    updateMemoryCenterTextPosition(memoryChart);
+                }
+            },
+            onResize: function(chart) {
+                updateMemoryCenterTextPosition(chart);
+            }
+        }
+    });
+    
+    // Position center text on the donut, not the entire chart area (with delay to ensure chartArea is ready)
+    setTimeout(() => updateMemoryCenterTextPosition(memoryChart), 100);
+}
+
+function updateMemoryCenterTextPosition(chart) {
+    const centerText = document.getElementById('memory-center-text');
+    if (!centerText || !chart) return;
+    
+    const chartArea = chart.chartArea;
+    if (!chartArea) {
+        // If chartArea not available yet, try again after a short delay
+        setTimeout(() => updateMemoryCenterTextPosition(chart), 100);
+        return;
+    }
+    
+    const canvas = chart.canvas;
+    const container = canvas.parentElement;
+    
+    // Calculate the center of the donut chart (chartArea), not the entire canvas
+    const donutCenterX = chartArea.left + (chartArea.right - chartArea.left) / 2;
+    const donutCenterY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
+    
+    // Convert to percentage relative to canvas
+    const leftPercent = (donutCenterX / canvas.width) * 100;
+    const topPercent = (donutCenterY / canvas.height) * 100;
+    
+    centerText.style.left = `${leftPercent}%`;
+    centerText.style.top = `${topPercent}%`;
+    centerText.style.transform = 'translate(-50%, -50%)';
+}
+
+function updateDiskChart(disk, apps, appmanager, breakdown) {
+    const ctx = document.getElementById('disk-chart');
+    if (!ctx) return;
+    
+    const usedPercent = disk.percent;
+    const freePercent = 100 - usedPercent;
+    
+    // Update center text
+    const centerText = document.getElementById('disk-center-text');
+    if (centerText) {
+        centerText.innerHTML = `
+            <div style="font-size: 2.5em; font-weight: bold; color: #d4d4d4; line-height: 1.2;">${usedPercent.toFixed(2)}%</div>
+            <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(${parseFloat(disk.used_gb).toFixed(2)} GB / ${parseFloat(disk.total_gb).toFixed(2)} GB)</div>
+        `;
+    }
+    
+    // Build breakdown data for the used portion
+    const labels = [];
+    const data = [];
+    const colors = [];
+    let colorIndex = 0;
+    
+    // Add mapped apps (based on disk usage)
+    apps.forEach(app => {
+        if (app.disk_percent > 0.01) { // Only show if > 0.01%
+            labels.push(app.app_name || `App ${app.port}`);
+            data.push(app.disk_percent);
+            colors.push(generateTrafficColor(colorIndex));
+            colorIndex++;
+        }
+    });
+    
+    // Add AppManager
+    if (appmanager && appmanager.disk_percent > 0.01) {
+        labels.push('AppManager');
+        data.push(appmanager.disk_percent);
+        colors.push(generateTrafficColor(colorIndex));
+        colorIndex++;
+    }
+    
+    // Add Other (everything else)
+    if (breakdown && breakdown.other && breakdown.other.disk_percent > 0.01) {
+        labels.push('Other');
+        data.push(breakdown.other.disk_percent);
+        colors.push(generateTrafficColor(colorIndex));
+        colorIndex++;
+    }
+    
+    // Calculate remaining used (if breakdown doesn't add up to 100%)
+    const breakdownTotal = data.reduce((sum, val) => sum + val, 0);
+    if (breakdownTotal < usedPercent && usedPercent - breakdownTotal > 0.01) {
+        labels.push('Unallocated');
+        data.push(usedPercent - breakdownTotal);
+        colors.push(generateTrafficColor(colorIndex));
+        colorIndex++;
+    }
+    
+    // Add free space
+    labels.push('Free');
+    data.push(freePercent);
+    colors.push('#252526'); // Dark background color
+    
+    // Update stats grid
+    let statsHtml = `
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Total:</span>
+            <span class="resource-stat-value">${parseFloat(disk.total_gb).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Used:</span>
+            <span class="resource-stat-value">${parseFloat(disk.used_gb).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Free:</span>
+            <span class="resource-stat-value">${parseFloat(disk.free_gb).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Usage:</span>
+            <span class="resource-stat-value">${usedPercent.toFixed(2)}%</span>
+        </div>
+    `;
+    
+    // Add breakdown details
+    apps.forEach(app => {
+        if (app.disk_percent > 0.01) {
+            statsHtml += `
+                <div class="resource-stat-item">
+                    <span class="resource-stat-label">${app.app_name}:</span>
+                    <span class="resource-stat-value">${parseFloat(app.disk_gb).toFixed(2)} GB (${app.disk_percent.toFixed(2)}%)</span>
+                </div>
+            `;
+        }
+    });
+    
+    if (appmanager && appmanager.disk_percent > 0.01) {
+        statsHtml += `
+            <div class="resource-stat-item">
+                <span class="resource-stat-label">AppManager:</span>
+                <span class="resource-stat-value">${parseFloat(appmanager.disk_gb).toFixed(2)} GB (${appmanager.disk_percent.toFixed(2)}%)</span>
+            </div>
+        `;
+    }
+    
+    if (breakdown && breakdown.other && breakdown.other.disk_percent > 0.01) {
+        statsHtml += `
+            <div class="resource-stat-item">
+                <span class="resource-stat-label">Other:</span>
+                <span class="resource-stat-value">${parseFloat(breakdown.other.disk_gb).toFixed(2)} GB (${breakdown.other.disk_percent.toFixed(2)}%)</span>
+            </div>
+        `;
+    }
+    
+    document.getElementById('disk-stats').innerHTML = statsHtml;
+    
+    if (diskChart) {
+        diskChart.destroy();
+    }
+    
+    diskChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors,
+                borderColor: '#1e1e1e',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right',
+                    labels: {
+                        color: '#ffffff',
+                        padding: 10,
+                        font: {
+                            size: 11,
+                            color: '#ffffff'
+                        },
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => {
+                                    const value = data.datasets[0].data[i];
+                                    return {
+                                        text: `${label} (${value.toFixed(2)}%)`,
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        strokeStyle: data.datasets[0].borderColor,
+                                        lineWidth: data.datasets[0].borderWidth,
+                                        hidden: false,
+                                        index: i,
+                                        fontColor: '#ffffff',
+                                        color: '#ffffff'
+                                    };
+                                });
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = disk.total_gb;
+                            const gb = (value / 100) * total;
+                            return `${label}: ${value.toFixed(2)}% (${gb.toFixed(2)} GB)`;
+                        }
+                    }
+                }
+            },
+            animation: {
+                onComplete: function() {
+                    updateDiskCenterTextPosition(diskChart);
+                }
+            },
+            onResize: function(chart) {
+                updateDiskCenterTextPosition(chart);
+            }
+        }
+    });
+    
+    // Position center text on the donut, not the entire chart area (with delay to ensure chartArea is ready)
+    setTimeout(() => updateDiskCenterTextPosition(diskChart), 100);
+}
+
+function updateDiskCenterTextPosition(chart) {
+    const centerText = document.getElementById('disk-center-text');
+    if (!centerText || !chart) return;
+    
+    const chartArea = chart.chartArea;
+    if (!chartArea) {
+        // If chartArea not available yet, try again after a short delay
+        setTimeout(() => updateDiskCenterTextPosition(chart), 100);
+        return;
+    }
+    
+    const canvas = chart.canvas;
+    const container = canvas.parentElement;
+    
+    // Calculate the center of the donut chart (chartArea), not the entire canvas
+    const donutCenterX = chartArea.left + (chartArea.right - chartArea.left) / 2;
+    const donutCenterY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
+    
+    // Convert to percentage relative to canvas
+    const leftPercent = (donutCenterX / canvas.width) * 100;
+    const topPercent = (donutCenterY / canvas.height) * 100;
+    
+    centerText.style.left = `${leftPercent}%`;
+    centerText.style.top = `${topPercent}%`;
+    centerText.style.transform = 'translate(-50%, -50%)';
+}
+
+function updateNetworkChart(network) {
+    const ctx = document.getElementById('network-chart');
+    if (!ctx) return;
+    
+    const sentGB = network.bytes_sent_gb;
+    const recvGB = network.bytes_recv_gb;
+    const totalGB = sentGB + recvGB;
+    
+    document.getElementById('network-value').textContent = `Sent: ${parseFloat(sentGB).toFixed(2)} GB | Received: ${parseFloat(recvGB).toFixed(2)} GB`;
+    
+    // Update stats grid
+    const statsHtml = `
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Bytes Sent:</span>
+            <span class="resource-stat-value">${parseFloat(sentGB).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Bytes Received:</span>
+            <span class="resource-stat-value">${parseFloat(recvGB).toFixed(2)} GB</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Packets Sent:</span>
+            <span class="resource-stat-value">${network.packets_sent.toLocaleString()}</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Packets Received:</span>
+            <span class="resource-stat-value">${network.packets_recv.toLocaleString()}</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Errors In:</span>
+            <span class="resource-stat-value">${network.errors_in.toLocaleString()}</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Errors Out:</span>
+            <span class="resource-stat-value">${network.errors_out.toLocaleString()}</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Drops In:</span>
+            <span class="resource-stat-value">${network.drops_in.toLocaleString()}</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Drops Out:</span>
+            <span class="resource-stat-value">${network.drops_out.toLocaleString()}</span>
+        </div>
+    `;
+    document.getElementById('network-stats').innerHTML = statsHtml;
+    
+    if (networkChart) {
+        networkChart.destroy();
+    }
+    
+    networkChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Sent', 'Received'],
+            datasets: [{
+                label: 'Network Traffic (GB)',
+                data: [sentGB, recvGB],
+                backgroundColor: ['#638ccc', '#ab62c0'],
+                borderColor: ['#638ccc', '#ab62c0'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(30, 30, 30, 0.95)',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    borderWidth: 1,
+                    padding: 12,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed.y || 0;
+                            return `${label}: ${value.toFixed(2)} GB`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#d4d4d4',
+                        callback: function(value) {
+                            return value.toFixed(2) + ' GB';
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#d4d4d4'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Traffic Manager
+let dailyVisitsChart = null;
+let hourlyDistributionChart = null;
+let countriesChart = null;
+let referrersChart = null;
+let appsBreakdownChart = null;
+let trafficStatsLoading = false;
+let lastTrafficStatsCall = 0;
+const TRAFFIC_STATS_THROTTLE_MS = 5000; // Minimum 5 seconds between calls
+
+async function refreshTrafficStats() {
+    // Throttle: prevent calls more frequently than every 5 seconds
+    const now = Date.now();
+    if (now - lastTrafficStatsCall < TRAFFIC_STATS_THROTTLE_MS) {
+        console.log('Traffic stats refresh throttled');
+        return;
+    }
+    
+    // Prevent duplicate simultaneous requests
+    if (trafficStatsLoading) {
+        console.log('Traffic stats already loading, skipping');
+        return;
+    }
+    
+    trafficStatsLoading = true;
+    lastTrafficStatsCall = now;
+    
+    try {
+        // Get include_local value from checkbox
+        const includeLocalCheckbox = document.getElementById('include-local-checkbox');
+        const includeLocal = includeLocalCheckbox ? includeLocalCheckbox.checked : true;
+        
+        const response = await fetch(`/admin/api/traffic?days=30&include_local=${includeLocal}`);
+        const result = await response.json();
+        
+        if (result.success && result.stats) {
+            updateTrafficCharts(result.stats);
+        } else {
+            console.error('Failed to load traffic stats:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading traffic stats:', error);
+    } finally {
+        trafficStatsLoading = false;
+    }
+}
+
+function handleIncludeLocalChange() {
+    // Refresh traffic stats when checkbox changes
+    refreshTrafficStats();
+}
+
+function updateTrafficCharts(stats) {
+    // Update overall statistics
+    document.getElementById('traffic-overall-value').textContent = 
+        `${stats.total_visits.toLocaleString()} visits | ${stats.total_unique_visitors.toLocaleString()} unique visitors`;
+    
+    const overallStatsHtml = `
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Total Visits:</span>
+            <span class="resource-stat-value">${stats.total_visits.toLocaleString()}</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Unique Visitors:</span>
+            <span class="resource-stat-value">${stats.total_unique_visitors.toLocaleString()}</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Period:</span>
+            <span class="resource-stat-value">${stats.period_days} days</span>
+        </div>
+        <div class="resource-stat-item">
+            <span class="resource-stat-label">Avg Daily Visits:</span>
+            <span class="resource-stat-value">${Math.round(stats.total_visits / stats.period_days).toLocaleString()}</span>
+        </div>
+    `;
+    document.getElementById('traffic-overall-stats').innerHTML = overallStatsHtml;
+    
+    // Daily Visits Chart
+    updateDailyVisitsChart(stats.daily_visits || []);
+    
+    // Hourly Distribution Chart
+    updateHourlyDistributionChart(stats.hourly_distribution || []);
+    
+    // Countries Chart
+    updateCountriesChart(stats.top_countries || {});
+    
+    // Referrers Chart
+    updateReferrersChart(stats.top_referrers || {});
+    
+    // Apps Breakdown Chart (with stacked referrers)
+    updateAppsBreakdownChart(stats.apps || {});
+}
+
+function updateDailyVisitsChart(dailyData) {
+    const ctx = document.getElementById('daily-visits-chart');
+    if (!ctx) return;
+    
+    const labels = dailyData.map(d => {
+        const date = new Date(d.date);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+    const visits = dailyData.map(d => d.visits);
+    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
+    
+    document.getElementById('daily-visits-value').textContent = `Total: ${totalVisits.toLocaleString()} visits`;
+    
+    if (dailyVisitsChart) {
+        dailyVisitsChart.destroy();
+    }
+    
+    dailyVisitsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Daily Visits',
+                data: visits,
+                borderColor: '#638ccc',
+                backgroundColor: 'rgba(99, 140, 204, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Visits: ${context.parsed.y}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#d4d4d4',
+                        stepSize: 1
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#d4d4d4',
+                        maxRotation: 45,
+                        minRotation: 45
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateHourlyDistributionChart(hourlyData) {
+    const ctx = document.getElementById('hourly-distribution-chart');
+    if (!ctx) return;
+    
+    const labels = hourlyData.map(d => `${d.hour}:00`);
+    const visits = hourlyData.map(d => d.visits);
+    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
+    
+    document.getElementById('hourly-distribution-value').textContent = 
+        totalVisits > 0 ? `Total: ${totalVisits.toLocaleString()} visits today` : 'No visits today';
+    
+    if (hourlyDistributionChart) {
+        hourlyDistributionChart.destroy();
+    }
+    
+    hourlyDistributionChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Visits',
+                data: visits,
+                backgroundColor: '#ab62c0',
+                borderColor: '#ab62c0',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Visits: ${context.parsed.y}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#d4d4d4',
+                        stepSize: 1
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#d4d4d4'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateCountriesChart(countriesData) {
+    const ctx = document.getElementById('countries-chart');
+    if (!ctx) return;
+    
+    const countries = Object.entries(countriesData).slice(0, 10); // Top 10
+    const labels = countries.map(([country]) => country);
+    const visits = countries.map(([, count]) => count);
+    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
+    
+    document.getElementById('countries-value').textContent = 
+        `${countries.length} countries tracked`;
+    
+    if (countriesChart) {
+        countriesChart.destroy();
+    }
+    
+    if (labels.length === 0) {
+        return;
+    }
+    
+    // Use muted color palette (matching screenshot colors)
+    const mutedColors = [
+        '#c57c3c', // Orange/Brown
+        '#ab62c0', // Purple
+        '#72a555', // Green
+        '#ca5670', // Red/Pink
+        '#638ccc', // Blue
+        '#8b6f47', // Brown
+        '#9d7fb8', // Light Purple
+        '#5d8a3f', // Dark Green
+        '#b84a5f', // Dark Pink
+        '#4a6ba3'  // Dark Blue
+    ];
+    
+    const colors = [];
+    for (let i = 0; i < labels.length; i++) {
+        colors.push(mutedColors[i % mutedColors.length]);
+    }
+    
+    countriesChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: visits,
+                backgroundColor: colors,
+                borderColor: '#1e1e1e',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right',
+                    labels: {
+                        color: '#ffffff',
+                        padding: 15,
+                        font: {
+                            size: 12,
+                            color: '#ffffff'
+                        },
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => {
+                                    const value = data.datasets[0].data[i];
+                                    const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
+                                    return {
+                                        text: `${label} (${percent}%)`,
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        strokeStyle: data.datasets[0].borderColor,
+                                        lineWidth: data.datasets[0].borderWidth,
+                                        hidden: false,
+                                        index: i,
+                                        fontColor: '#ffffff',
+                                        color: '#ffffff'
+                                    };
+                                });
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
+                            return `${label}: ${value} visits (${percent}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateReferrersChart(referrersData) {
+    const ctx = document.getElementById('referrers-chart');
+    if (!ctx) return;
+    
+    // Get all referrers sorted by count
+    const allReferrers = Object.entries(referrersData).sort((a, b) => b[1] - a[1]);
+    const totalReferrerVisits = allReferrers.reduce((sum, [, count]) => sum + count, 0);
+    
+    if (allReferrers.length === 0 || totalReferrerVisits === 0) {
+        document.getElementById('referrers-value').textContent = 'No referrer data';
+        return;
+    }
+    
+    // Take top 10 individually
+    const top10 = allReferrers.slice(0, 10);
+    const others = allReferrers.slice(10);
+    
+    // Build labels and data
+    const labels = top10.map(([referrer]) => referrer || 'Direct');
+    const visits = top10.map(([, count]) => count);
+    
+    // Add "Other" category if there are more than 10 referrers
+    if (others.length > 0) {
+        const otherVisits = others.reduce((sum, [, count]) => sum + count, 0);
+        labels.push('Other');
+        visits.push(otherVisits);
+    }
+    
+    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
+    
+    document.getElementById('referrers-value').textContent = 
+        `${allReferrers.length} referrers tracked`;
+    
+    if (referrersChart) {
+        referrersChart.destroy();
+    }
+    
+    // Use muted color palette (matching screenshot colors)
+    const mutedColors = [
+        '#c57c3c', // Orange/Brown
+        '#ab62c0', // Purple
+        '#72a555', // Green
+        '#ca5670', // Red/Pink
+        '#638ccc', // Blue
+        '#8b6f47', // Brown
+        '#9d7fb8', // Light Purple
+        '#5d8a3f', // Dark Green
+        '#b84a5f', // Dark Pink
+        '#4a6ba3'  // Dark Blue
+    ];
+    
+    const colors = [];
+    for (let i = 0; i < labels.length; i++) {
+        colors.push(mutedColors[i % mutedColors.length]);
+    }
+    
+    referrersChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: visits,
+                backgroundColor: colors,
+                borderColor: '#1e1e1e',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right',
+                    labels: {
+                        color: '#e0e0e0',
+                        padding: 15,
+                        font: {
+                            size: 12,
+                            color: '#e0e0e0'
+                        },
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => {
+                                    const value = data.datasets[0].data[i];
+                                    const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
+                                    return {
+                                        text: `${label} (${percent}%)`,
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        strokeStyle: data.datasets[0].borderColor,
+                                        lineWidth: data.datasets[0].borderWidth,
+                                        hidden: false,
+                                        index: i,
+                                        fontColor: '#e0e0e0'
+                                    };
+                                });
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(30, 30, 30, 0.95)',
+                    titleColor: '#e0e0e0',
+                    bodyColor: '#e0e0e0',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || 'Direct';
+                            const value = context.parsed || 0;
+                            const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
+                            return `${label}: ${value} visits (${percent}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateAppsBreakdownChart(appsData) {
+    const ctx = document.getElementById('apps-breakdown-chart');
+    if (!ctx) return;
+    
+    const apps = Object.entries(appsData);
+    const appLabels = apps.map(([name]) => name);
+    const totalVisits = apps.reduce((sum, [, data]) => sum + (data.visits || 0), 0);
+    
+    // Collect all unique referrers across all apps
+    const allReferrers = new Set();
+    apps.forEach(([appName, appData]) => {
+        if (appData.referrers) {
+            Object.keys(appData.referrers).forEach(ref => allReferrers.add(ref));
+        }
+    });
+    
+    const referrerList = Array.from(allReferrers).sort();
+    
+    document.getElementById('apps-breakdown-value').textContent = 
+        `${apps.length} apps tracked | ${totalVisits.toLocaleString()} total visits${referrerList.length > 0 ? ` | ${referrerList.length} referrers` : ''}`;
+    
+    // Update stats grid
+    let statsHtml = '';
+    apps.forEach(([name, data]) => {
+        if (data.visits > 0) {
+            statsHtml += `
+                <div class="resource-stat-item">
+                    <span class="resource-stat-label">${name}:</span>
+                    <span class="resource-stat-value">${data.visits.toLocaleString()} visits (${data.unique_visitors} unique)</span>
+                </div>
+            `;
+        }
+    });
+    document.getElementById('apps-breakdown-stats').innerHTML = statsHtml || 
+        '<div class="resource-stat-item"><span class="resource-stat-label">No traffic data yet</span></div>';
+    
+    if (appsBreakdownChart) {
+        appsBreakdownChart.destroy();
+    }
+    
+    if (appLabels.length === 0 || totalVisits === 0) {
+        return;
+    }
+    
+    // Build datasets for each referrer (each referrer will be a stack segment)
+    // If no referrers, fall back to single dataset showing total visits
+    let datasets;
+    if (referrerList.length === 0) {
+        // No referrer data, show simple bar chart
+        const visits = apps.map(([, data]) => data.visits || 0);
+        const mutedColors = [
+            '#c57c3c', // Orange/Brown
+            '#ab62c0', // Purple
+            '#72a555', // Green
+            '#ca5670', // Red/Pink
+            '#638ccc', // Blue
+            '#8b6f47', // Brown
+            '#9d7fb8', // Light Purple
+            '#5d8a3f', // Dark Green
+            '#b84a5f', // Dark Pink
+            '#4a6ba3'  // Dark Blue
+        ];
+        const colors = [];
+        for (let i = 0; i < appLabels.length; i++) {
+            colors.push(mutedColors[i % mutedColors.length]);
+        }
+        datasets = [{
+            label: 'Visits',
+            data: visits,
+            backgroundColor: colors,
+            borderColor: colors,
+            borderWidth: 1
+        }];
+    } else {
+        // Create stacked datasets for each referrer
+        const mutedColors = [
+            '#c57c3c', // Orange/Brown
+            '#ab62c0', // Purple
+            '#72a555', // Green
+            '#ca5670', // Red/Pink
+            '#638ccc', // Blue
+            '#8b6f47', // Brown
+            '#9d7fb8', // Light Purple
+            '#5d8a3f', // Dark Green
+            '#b84a5f', // Dark Pink
+            '#4a6ba3'  // Dark Blue
+        ];
+        datasets = referrerList.map((referrer, index) => {
+            const color = mutedColors[index % mutedColors.length];
+            
+            // For each app, get the count for this referrer
+            const data = apps.map(([appName, appData]) => {
+                return appData.referrers ? (appData.referrers[referrer] || 0) : 0;
+            });
+            
+            return {
+                label: referrer || 'Direct',
+                data: data,
+                backgroundColor: color,
+                borderColor: color,
+                borderWidth: 1
+            };
+        });
+    }
+    
+    appsBreakdownChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: appLabels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: referrerList.length > 0,
+                    position: 'top',
+                    labels: {
+                        color: '#e0e0e0',
+                        padding: 15,
+                        font: {
+                            size: 12
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(30, 30, 30, 0.95)',
+                    titleColor: '#e0e0e0',
+                    bodyColor: '#e0e0e0',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            if (referrerList.length === 0) {
+                                // Simple tooltip for non-stacked chart
+                                const label = context.label || '';
+                                const value = context.parsed.y || 0;
+                                const appData = appsData[label];
+                                const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} visits (${percent}%) | ${appData.unique_visitors} unique visitors`;
+                            } else {
+                                // Stacked chart tooltip
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y || 0;
+                                const appName = context.label || '';
+                                const appData = appsData[appName];
+                                const appTotal = appData.visits || 0;
+                                const percent = appTotal > 0 ? ((value / appTotal) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} visits (${percent}% of ${appName})`;
+                            }
+                        },
+                        footer: function(tooltipItems) {
+                            if (referrerList.length > 0 && tooltipItems.length > 0) {
+                                const appName = tooltipItems[0].label;
+                                const appData = appsData[appName];
+                                const total = tooltipItems.reduce((sum, item) => sum + (item.parsed.y || 0), 0);
+                                return `Total: ${total} visits | ${appData.unique_visitors} unique visitors`;
+                            }
+                            return '';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    stacked: referrerList.length > 0,
+                    ticks: {
+                        color: '#d4d4d4',
+                        stepSize: 1
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                x: {
+                    stacked: referrerList.length > 0,
+                    ticks: {
+                        color: '#d4d4d4',
+                        maxRotation: 45,
+                        minRotation: 45
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Admin Login Tracking
+async function refreshAdminLogins() {
+    try {
+        const response = await fetch('/admin/api/admin-logins');
+        const result = await response.json();
+        
+        if (result.success && result.logins) {
+            updateAdminLoginsTable(result.logins);
+        } else {
+            console.error('Failed to load admin login stats:', result.error);
+            document.getElementById('admin-logins-table-body').innerHTML = 
+                '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #ff6b6b;">Error loading login history</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading admin login stats:', error);
+        document.getElementById('admin-logins-table-body').innerHTML = 
+            '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #ff6b6b;">Error loading login history</td></tr>';
+    }
+}
+
+function updateAdminLoginsTable(logins) {
+    const tbody = document.getElementById('admin-logins-table-body');
+    
+    if (!logins || logins.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #808080;">No login history</td></tr>';
+        return;
+    }
+    
+    let html = '';
+    logins.forEach(login => {
+        const lastLogin = login.last_login ? new Date(login.last_login).toLocaleString() : 'Never';
+        const location = login.city && login.city !== 'Unknown' && login.city !== 'Local' 
+            ? `${login.city}, ${login.country}` 
+            : login.country || 'Unknown';
+        
+        // Highlight current session
+        const rowClass = login.is_current ? 'style="background: rgba(102, 126, 234, 0.2); border-left: 3px solid #667eea;"' : '';
+        
+        html += `
+            <tr ${rowClass}>
+                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; color: #d4d4d4;">
+                    ${login.ip}
+                    ${login.is_current ? '<span style="color: #667eea; margin-left: 8px; font-size: 0.85em;">(Current Session)</span>' : ''}
+                </td>
+                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; color: #d4d4d4;">${location}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; text-align: right; color: #d4d4d4;">${login.login_count}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; color: #d4d4d4;">${lastLogin}</td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
 </script>
 {% endblock %}
+
+
 

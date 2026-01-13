@@ -60,7 +60,18 @@ class AppConfig:
     def get_all(cls) -> List[Dict]:
         """Get all app configurations"""
         config = cls._load_config()
-        return config.get('apps', [])
+        apps = config.get('apps', [])
+        # Ensure serve_app field exists for existing apps (defaults to True)
+        for app in apps:
+            if 'serve_app' not in app:
+                app['serve_app'] = True
+        return apps
+    
+    @classmethod
+    def get_served_apps(cls) -> List[Dict]:
+        """Get all app configurations where serve_app is True"""
+        apps = cls.get_all()
+        return [app for app in apps if app.get('serve_app', True)]
     
     @classmethod
     def get_by_id(cls, app_id: str) -> Optional[Dict]:
@@ -82,7 +93,7 @@ class AppConfig:
         return None
     
     @classmethod
-    def create(cls, name: str, port: int, logo: Optional[str] = None, service_name: Optional[str] = None) -> Dict:
+    def create(cls, name: str, port: int, logo: Optional[str] = None, service_name: Optional[str] = None, serve_app: bool = True, folder_path: Optional[str] = None) -> Dict:
         """Create a new app configuration"""
         apps = cls.get_all()
         
@@ -97,7 +108,9 @@ class AppConfig:
             'name': name,
             'port': int(port),
             'logo': logo,
-            'service_name': service_name or f"app-{port}.service"
+            'service_name': service_name or f"app-{port}.service",
+            'serve_app': serve_app,
+            'folder_path': folder_path
         }
         
         apps.append(app_config)
@@ -108,7 +121,7 @@ class AppConfig:
         return app_config
     
     @classmethod
-    def update(cls, app_id: str, name: str = None, port: int = None, logo: str = None, service_name: str = None) -> Optional[Dict]:
+    def update(cls, app_id: str, name: str = None, port: int = None, logo: str = None, service_name: str = None, serve_app: bool = None, folder_path: str = None) -> Optional[Dict]:
         """Update an existing app configuration"""
         apps = cls.get_all()
         
@@ -127,6 +140,10 @@ class AppConfig:
                     app['logo'] = logo
                 if service_name is not None:
                     app['service_name'] = service_name
+                if serve_app is not None:
+                    app['serve_app'] = serve_app
+                if folder_path is not None:
+                    app['folder_path'] = folder_path
                 
                 config = cls._load_config()
                 config['apps'] = apps
@@ -134,6 +151,15 @@ class AppConfig:
                 
                 return app
         
+        return None
+    
+    @classmethod
+    def toggle_serve_app(cls, app_id: str) -> Optional[Dict]:
+        """Toggle the serve_app status for an app"""
+        app = cls.get_by_id(app_id)
+        if app:
+            current_status = app.get('serve_app', True)
+            return cls.update(app_id, serve_app=not current_status)
         return None
     
     @classmethod

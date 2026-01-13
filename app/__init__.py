@@ -66,5 +66,86 @@ def create_app():
         except (ValueError, TypeError, AttributeError):
             return None
     
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        """Handle unauthorized access - return JSON for API routes, redirect for pages"""
+        from flask import request, jsonify, redirect, url_for
+        # Check if this is an API request (starts with /api/ or Accept header wants JSON)
+        if request.path.startswith('/admin/api/') or request.accept_mimetypes.best_match(['application/json', 'text/html']) == 'application/json':
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required',
+                'login_required': True
+            }), 401
+        # Otherwise redirect to login page
+        return redirect(url_for('admin.login'))
+    
+    # Add traffic tracking hook
+    @app.before_request
+    def track_traffic():
+        """Track all incoming requests for traffic statistics"""
+        try:
+            from app.utils.traffic_tracker import track_visit
+            from flask import request
+            
+            # Skip tracking for static files and API endpoints that are called frequently
+            if request.endpoint in ('static', 'admin.get_resource_stats', 'admin.get_traffic_stats'):
+                return
+            
+            # Determine app name based on route
+            # Default: group all non-mapped apps together as "App Manager"
+            app_name = 'App Manager'
+            
+            if request.blueprint == 'proxy':
+                # Extract app slug from path
+                path_parts = request.path.strip('/').split('/')
+                if path_parts:
+                    app_slug = path_parts[0]
+                    from app.models.app_config import AppConfig
+                    try:
+                        app_config = AppConfig.get_by_slug(app_slug)
+                        if app_config:
+                            # This is a mapped/proxied app - use its actual name
+                            app_name = app_config.get('name', app_slug)
+                        else:
+                            # Unmapped proxy route - group with App Manager
+                            app_name = 'App Manager'
+                    except:
+                        # Error looking up app - group with App Manager
+                        app_name = 'App Manager'
+            # All other routes (welcome, admin, etc.) are grouped as "App Manager"
+            # No need for elif - app_name already defaults to 'App Manager'
+            
+            # Get client IP (handle proxy headers)
+            ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
+            if ip_address:
+                # X-Forwarded-For can contain multiple IPs, take the first one
+                ip_address = ip_address.split(',')[0].strip()
+            else:
+                ip_address = request.remote_addr or 'unknown'
+            
+            # Get user agent
+            user_agent = request.headers.get('User-Agent', 'unknown')
+            
+            # Get referrer
+            referrer = request.headers.get('Referer') or request.referrer
+            
+            # Track the visit (non-blocking, runs in background)
+            try:
+                track_visit(
+                    instance_path=app.instance_path,
+                    app_name=app_name,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    path=request.path,
+                    referrer=referrer
+                )
+            except Exception as e:
+                # Don't fail the request if tracking fails
+                app.logger.warning(f"Traffic tracking error: {e}")
+        except Exception:
+            # Silently fail - don't break the app if tracking has issues
+            pass
+    
     return app
 

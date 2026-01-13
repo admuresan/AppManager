@@ -195,9 +195,17 @@ def proxy_path(app_slug, path):
             return f"Error loading app configuration: {str(e)}", 500
         
         if not app_config:
-            # App not found, redirect to welcome page
+            # App not found, return not found page
             logger.warning(f"App not found for slug: {app_slug}")
-            return redirect(url_for('welcome.index'))
+            from flask import render_template
+            return render_template('app_not_found.html'), 404
+        
+        # Check if app is set to be served
+        if not app_config.get('serve_app', True):
+            # App exists but is not being served, return not found page
+            logger.info(f"App {app_slug} exists but is not set to be served")
+            from flask import render_template
+            return render_template('app_not_found.html'), 404
         
         app_port = app_config['port']
         app_name = app_config['name']

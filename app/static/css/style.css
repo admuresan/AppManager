@@ -449,12 +449,14 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 20px;
 }
 
 .app-info {
     display: flex;
     align-items: center;
     gap: 20px;
+    flex: 1;
 }
 
 .logo-preview {
@@ -486,6 +488,34 @@ body {
 .app-details p {
     color: #b0b0b0;
     font-size: 0.9em;
+}
+
+.app-serve-checkbox {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: 120px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: #d4d4d4;
+    font-size: 0.9em;
+    user-select: none;
+}
+
+.checkbox-label:hover {
+    color: #ffffff;
+}
+
+.serve-app-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #667eea;
 }
 
 .app-actions {
@@ -817,6 +847,14 @@ body {
     font-size: 0.9em;
 }
 
+/* Allow resource manager and traffic analysis sections to have custom heights */
+.console-content:has(.resource-content) {
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    background: transparent;
+}
+
 .console-content table {
     width: 100%;
     border-collapse: collapse;
@@ -942,6 +980,11 @@ body {
         flex-direction: column;
         align-items: flex-start;
         gap: 15px;
+    }
+    
+    .app-serve-checkbox {
+        min-width: auto;
+        width: 100%;
     }
     
     .app-actions {

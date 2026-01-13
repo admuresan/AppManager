@@ -25,7 +25,8 @@ def get_server_address():
 @bp.route('/')
 def index():
     """Welcome page showing available apps"""
-    apps = AppConfig.get_all()
+    # Only show apps where serve_app is True
+    apps = AppConfig.get_served_apps()
     server_address = get_server_address()
     
     # Always include the manager app

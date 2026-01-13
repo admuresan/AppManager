@@ -34,16 +34,48 @@ def handle_file_too_large(e):
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     """Admin login page"""
+    # Get client IP address (handle proxy headers)
+    ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
+    if ip_address:
+        ip_address = ip_address.split(',')[0].strip()
+    else:
+        ip_address = request.remote_addr or None
+    
     if request.method == 'POST':
+        # Check if IP is blocked before processing login
+        from app.utils.login_security import is_ip_blocked, record_failed_attempt, reset_failed_attempts
+        
+        is_blocked, remaining_attempts, block_message = is_ip_blocked(current_app.instance_path, ip_address)
+        if is_blocked:
+            flash(block_message, 'error')
+            return render_template('admin/login.html')
+        
         username = request.form.get('username')
         password = request.form.get('password')
         
         user = User.get_by_username(username)
         if user and user.check_password(password):
+            # Successful login - reset failed attempts
+            reset_failed_attempts(current_app.instance_path, ip_address)
+            
+            # Track admin login
+            try:
+                from app.utils.traffic_tracker import track_admin_login, add_admin_ip
+                if ip_address:
+                    track_admin_login(current_app.instance_path, ip_address)
+                    add_admin_ip(current_app.instance_path, ip_address)
+            except:
+                pass  # Don't fail login if tracking fails
+            
             login_user(user)
             return redirect(url_for('admin.dashboard'))
         else:
-            flash('Invalid username or password', 'error')
+            # Failed login - record attempt
+            is_now_blocked, remaining_attempts, error_message = record_failed_attempt(current_app.instance_path, ip_address)
+            if is_now_blocked:
+                flash(error_message, 'error')
+            else:
+                flash(f'Invalid username or password. {error_message}', 'error')
     
     return render_template('admin/login.html')
 
@@ -58,6 +90,19 @@ def logout():
 @login_required
 def dashboard():
     """Admin dashboard showing all apps"""
+    # Track admin IP for filtering
+    try:
+        from app.utils.traffic_tracker import add_admin_ip
+        ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
+        if ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+        else:
+            ip_address = request.remote_addr or None
+        if ip_address:
+            add_admin_ip(current_app.instance_path, ip_address)
+    except:
+        pass  # Don't fail if tracking fails
+    
     apps = AppConfig.get_all()
     return render_template('admin/dashboard.html', apps=apps)
 
@@ -75,6 +120,7 @@ def create_app():
     name = request.form.get('name')
     port = request.form.get('port')
     service_name = request.form.get('service_name', '')
+    folder_path = request.form.get('folder_path', '').strip()
     
     if not name or not port:
         return jsonify({'error': 'Name and port are required'}), 400
@@ -116,7 +162,8 @@ def create_app():
             name=name,
             port=port,
             logo=logo_path,
-            service_name=service_name if service_name else None
+            service_name=service_name if service_name else None,
+            folder_path=folder_path if folder_path else None
         )
     except ValueError as e:
         # Handle duplicate slug error
@@ -159,6 +206,7 @@ def update_app(app_id):
         name = data.get('name')
         port = data.get('port')
         service_name = data.get('service_name', '')
+        folder_path = data.get('folder_path', '').strip()
         
         # Handle logo upload if provided
         logo_path = None
@@ -188,6 +236,7 @@ def update_app(app_id):
         name = data.get('name')
         port = data.get('port')
         service_name = data.get('service_name', '')
+        folder_path = data.get('folder_path', '').strip()
         final_logo = data.get('logo')
     
     if not name or not port:
@@ -212,7 +261,8 @@ def update_app(app_id):
             name=name,
             port=port,
             logo=final_logo,
-            service_name=service_name if service_name else None
+            service_name=service_name if service_name else None,
+            folder_path=folder_path if folder_path else None
         )
     except ValueError as e:
         # Handle duplicate slug error
@@ -266,6 +316,16 @@ def delete_app(app_id):
         # because the port might still be in use by the app itself or other services
         # Admin can manually remove firewall rules if needed
         return jsonify({'success': True})
+    else:
+        return jsonify({'error': 'App not found'}), 404
+
+@bp.route('/api/apps/<app_id>/toggle-serve', methods=['POST'])
+@login_required
+def toggle_serve_app(app_id):
+    """Toggle the serve_app status for an app"""
+    app_config = AppConfig.toggle_serve_app(app_id)
+    if app_config:
+        return jsonify({'success': True, 'app': app_config})
     else:
         return jsonify({'error': 'App not found'}), 404
 
@@ -1507,6 +1567,425 @@ def terminal_autocomplete():
     except Exception as e:
         current_app.logger.error(f"Error in terminal_autocomplete: {str(e)}", exc_info=True)
         return jsonify({'matches': [], 'is_directory': False, 'error': str(e)}), 500
+
+# Simple in-memory cache for resource stats (to minimize server load)
+_resource_cache = {
+    'data': None,
+    'timestamp': 0,
+    'ttl': 5  # Cache for 5 seconds
+}
+
+def _get_appmanager_pid():
+    """Get AppManager's process ID"""
+    try:
+        import psutil
+        from app.utils.app_manager import _get_pid_by_port
+        
+        # Try to get PID by port (AppManager runs on port 5000 or 80)
+        # Check common ports
+        for port in [5000, 80, 443]:
+            pid = _get_pid_by_port(port)
+            if pid:
+                # Verify it's actually AppManager by checking the process name
+                try:
+                    proc = psutil.Process(pid)
+                    proc_name = proc.name().lower()
+                    cmdline = ' '.join(proc.cmdline()).lower()
+                    # Check if it's a Python process running AppManager
+                    if 'python' in proc_name and ('appmanager' in cmdline or 'app.py' in cmdline or 'run.py' in cmdline):
+                        return pid
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        
+        # Fallback: use current process PID (if running directly)
+        # This works when AppManager is run directly, but not with WSGI servers
+        return os.getpid()
+    except Exception:
+        # Last resort: return current process PID
+        try:
+            return os.getpid()
+        except:
+            return None
+
+def _get_directory_size(path):
+    """Get the total size of a directory in bytes"""
+    try:
+        total_size = 0
+        if not os.path.exists(path):
+            return 0
+        
+        if os.path.isfile(path):
+            return os.path.getsize(path)
+        
+        # Walk through directory tree
+        for dirpath, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.path.getsize(filepath)
+                except (OSError, PermissionError, FileNotFoundError):
+                    # Skip files we can't access
+                    continue
+        
+        return total_size
+    except (OSError, PermissionError, FileNotFoundError):
+        # Return 0 if we can't access the directory
+        return 0
+
+def _get_process_tree_resources(pid):
+    """Get memory and CPU usage for a process and all its children"""
+    try:
+        import psutil
+        total_memory = 0
+        total_cpu = 0
+        
+        try:
+            proc = psutil.Process(pid)
+            # Get memory info (RSS - Resident Set Size)
+            mem_info = proc.memory_info()
+            total_memory += mem_info.rss
+            
+            # Get CPU percent (non-blocking)
+            total_cpu += proc.cpu_percent(interval=None) or 0
+            
+            # Get all children
+            for child in proc.children(recursive=True):
+                try:
+                    child_mem = child.memory_info()
+                    total_memory += child_mem.rss
+                    total_cpu += child.cpu_percent(interval=None) or 0
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        
+        return {
+            'memory_bytes': total_memory,
+            'memory_gb': round(total_memory / (1024**3), 3),
+            'cpu_percent': round(total_cpu, 2)
+        }
+    except Exception:
+        return {'memory_bytes': 0, 'memory_gb': 0, 'cpu_percent': 0}
+
+def _get_app_process_pids(app_config):
+    """Get all PIDs associated with an app (by port or service)"""
+    import psutil
+    from app.utils.app_manager import _get_pid_by_port, _get_service_by_pid
+    
+    pids = set()
+    port = app_config.get('port')
+    service_name = app_config.get('service_name')
+    
+    # Method 1: Get PID by port
+    if port:
+        pid = _get_pid_by_port(port)
+        if pid:
+            pids.add(pid)
+    
+    # Method 2: Get PID by service name
+    if service_name:
+        try:
+            # Try to get main PID from systemd
+            result = subprocess.run(
+                ['systemctl', 'show', service_name, '--property=MainPID', '--value'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result.returncode == 0:
+                pid_str = result.stdout.strip()
+                if pid_str and pid_str.isdigit():
+                    pids.add(int(pid_str))
+        except:
+            pass
+    
+    # Method 3: Find all processes that might belong to this app
+    # (by checking if they're listening on the port)
+    if port:
+        try:
+            for conn in psutil.net_connections(kind='inet'):
+                if conn.laddr.port == port and conn.status == 'LISTEN' and conn.pid:
+                    pids.add(conn.pid)
+        except:
+            pass
+    
+    return list(pids)
+
+@bp.route('/api/traffic', methods=['GET'])
+@login_required
+def get_traffic_stats():
+    """Get traffic statistics (visits, unique visitors, geography, per-app breakdown)"""
+    try:
+        from app.utils.traffic_tracker import get_traffic_stats, add_admin_ip
+        
+        # Track admin IP for filtering (update on each API call in case IP changes)
+        ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
+        if ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+        else:
+            ip_address = request.remote_addr or None
+        if ip_address:
+            add_admin_ip(current_app.instance_path, ip_address)
+        
+        days = request.args.get('days', 30, type=int)
+        if days < 1 or days > 365:
+            days = 30
+        
+        # Get include_local parameter (default to True for backward compatibility)
+        include_local = request.args.get('include_local', 'true').lower() == 'true'
+        
+        stats = get_traffic_stats(current_app.instance_path, days=days, include_local=include_local)
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error getting traffic stats: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/api/admin-logins', methods=['GET'])
+@login_required
+def get_admin_logins():
+    """Get admin login statistics"""
+    try:
+        from app.utils.traffic_tracker import get_admin_login_stats
+        
+        # Get current IP
+        ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
+        if ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+        else:
+            ip_address = request.remote_addr or None
+        
+        stats = get_admin_login_stats(current_app.instance_path, current_ip=ip_address)
+        
+        return jsonify({
+            'success': True,
+            'logins': stats
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error getting admin login stats: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/api/opt-folders', methods=['GET'])
+@login_required
+def get_opt_folders():
+    """Get list of folders in /opt directory"""
+    try:
+        opt_path = Path('/opt')
+        folders = []
+        
+        if opt_path.exists() and opt_path.is_dir():
+            for item in opt_path.iterdir():
+                if item.is_dir():
+                    # Skip hidden directories and system directories
+                    if not item.name.startswith('.') and item.name not in ['lost+found']:
+                        folders.append(item.name)
+        
+        folders.sort()
+        return jsonify({
+            'success': True,
+            'folders': folders
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error listing /opt folders: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'folders': []
+        }), 500
+
+@bp.route('/api/resources', methods=['GET'])
+@login_required
+def get_resource_stats():
+    """Get system resource statistics (memory, disk, network)
+    
+    Uses caching to minimize server load. Stats are cached for 5 seconds.
+    """
+    import time
+    
+    # Check cache first
+    current_time = time.time()
+    if (_resource_cache['data'] is not None and 
+        current_time - _resource_cache['timestamp'] < _resource_cache['ttl']):
+        # Return cached data
+        cached_data = _resource_cache['data'].copy()
+        cached_data['cached'] = True
+        return jsonify(cached_data)
+    
+    try:
+        import psutil
+        
+        # Memory stats (non-blocking)
+        memory = psutil.virtual_memory()
+        memory_stats = {
+            'total_gb': round(memory.total / (1024**3), 2),
+            'available_gb': round(memory.available / (1024**3), 2),
+            'used_gb': round(memory.used / (1024**3), 2),
+            'percent': memory.percent,
+            'free_gb': round(memory.free / (1024**3), 2)
+        }
+        
+        # Disk stats (root partition) - can be slow on some systems, but necessary
+        disk = psutil.disk_usage('/')
+        disk_stats = {
+            'total_gb': round(disk.total / (1024**3), 2),
+            'used_gb': round(disk.used / (1024**3), 2),
+            'free_gb': round(disk.free / (1024**3), 2),
+            'percent': round((disk.used / disk.total) * 100, 2)
+        }
+        
+        # Network stats (non-blocking, cumulative counters)
+        net_io = psutil.net_io_counters()
+        network_stats = {
+            'bytes_sent': net_io.bytes_sent,
+            'bytes_recv': net_io.bytes_recv,
+            'packets_sent': net_io.packets_sent,
+            'packets_recv': net_io.packets_recv,
+            'bytes_sent_gb': round(net_io.bytes_sent / (1024**3), 2),
+            'bytes_recv_gb': round(net_io.bytes_recv / (1024**3), 2),
+            'errors_in': net_io.errin,
+            'errors_out': net_io.errout,
+            'drops_in': net_io.dropin,
+            'drops_out': net_io.dropout
+        }
+        
+        # CPU stats - use non-blocking call (interval=None)
+        # This is instant and doesn't block. First call returns 0, but subsequent calls are accurate.
+        # Since we cache for 5 seconds, the slight delay in accuracy is acceptable.
+        cpu_percent = psutil.cpu_percent(interval=None)  # Non-blocking
+        cpu_stats = {
+            'percent': cpu_percent if cpu_percent > 0 else 0,  # Accept 0 on first call
+            'count': psutil.cpu_count()
+        }
+        
+        # Get per-application resource breakdown
+        app_resources = []
+        apps = AppConfig.get_all()
+        total_app_memory = 0
+        total_app_cpu = 0
+        appmanager_memory = 0
+        appmanager_cpu = 0
+        
+        # Get AppManager's own memory usage
+        appmanager_pid = _get_appmanager_pid()
+        if appmanager_pid:
+            appmanager_resources = _get_process_tree_resources(appmanager_pid)
+            appmanager_memory = appmanager_resources['memory_bytes']
+            appmanager_cpu = appmanager_resources['cpu_percent']
+        
+        for app in apps:
+            app_pids = _get_app_process_pids(app)
+            if app_pids:
+                app_memory_bytes = 0
+                app_cpu_percent = 0
+                
+                for pid in app_pids:
+                    resources = _get_process_tree_resources(pid)
+                    app_memory_bytes += resources['memory_bytes']
+                    app_cpu_percent += resources['cpu_percent']
+                
+                app_memory_gb = round(app_memory_bytes / (1024**3), 3)
+                app_memory_percent = round((app_memory_bytes / memory.total) * 100, 2) if memory.total > 0 else 0
+                
+                total_app_memory += app_memory_bytes
+                total_app_cpu += app_cpu_percent
+                
+                # Get disk usage for this app (check /opt/{folder_path} if specified)
+                folder_path = app.get('folder_path')
+                if folder_path:
+                    app_disk_path = f'/opt/{folder_path}'
+                else:
+                    # Fallback: try to guess from app name
+                    app_name = app.get('name', '').lower().replace(' ', '-')
+                    app_disk_path = f'/opt/{app_name}'
+                app_disk_bytes = _get_directory_size(app_disk_path)
+                app_disk_gb = round(app_disk_bytes / (1024**3), 3)
+                
+                app_resources.append({
+                    'app_id': app.get('id'),
+                    'app_name': app.get('name'),
+                    'port': app.get('port'),
+                    'memory_gb': app_memory_gb,
+                    'memory_percent': app_memory_percent,
+                    'cpu_percent': round(app_cpu_percent, 2),
+                    'disk_gb': app_disk_gb,
+                    'disk_percent': round((app_disk_bytes / disk.total) * 100, 3) if disk.total > 0 else 0,
+                    'pids': app_pids
+                })
+        
+        # Get AppManager disk usage
+        appmanager_disk_path = '/opt/appmanager'
+        appmanager_disk_bytes = _get_directory_size(appmanager_disk_path)
+        appmanager_disk_gb = round(appmanager_disk_bytes / (1024**3), 2)
+        
+        # Calculate system and other usage
+        total_app_memory_gb = round(total_app_memory / (1024**3), 2)
+        appmanager_memory_gb = round(appmanager_memory / (1024**3), 2)
+        system_memory_gb = round(memory.total / (1024**3) * 0.1, 2)  # Estimate ~10% for system
+        other_memory_gb = round((memory.used - total_app_memory - appmanager_memory) / (1024**3), 2)
+        other_memory_gb = max(0, other_memory_gb - system_memory_gb)  # Subtract system estimate
+        
+        # Calculate disk breakdown
+        total_app_disk = sum(r.get('disk_gb', 0) * (1024**3) for r in app_resources)
+        other_disk_bytes = disk.used - total_app_disk - appmanager_disk_bytes
+        other_disk_gb = round(max(0, other_disk_bytes) / (1024**3), 2)
+        
+        result = {
+            'success': True,
+            'memory': memory_stats,
+            'disk': disk_stats,
+            'network': network_stats,
+            'cpu': cpu_stats,
+            'timestamp': time.time(),
+            'cached': False,
+            'apps': app_resources,
+            'appmanager': {
+                'memory_gb': appmanager_memory_gb,
+                'memory_percent': round((appmanager_memory / memory.total) * 100, 2) if memory.total > 0 else 0,
+                'cpu_percent': round(appmanager_cpu, 2),
+                'disk_gb': appmanager_disk_gb,
+                'disk_percent': round((appmanager_disk_bytes / disk.total) * 100, 2) if disk.total > 0 else 0
+            },
+            'breakdown': {
+                'apps': {
+                    'memory_gb': total_app_memory_gb,
+                    'memory_percent': round((total_app_memory / memory.total) * 100, 2) if memory.total > 0 else 0,
+                    'cpu_percent': round(total_app_cpu, 2)
+                },
+                'system': {
+                    'memory_gb': system_memory_gb,
+                    'memory_percent': round((system_memory_gb * 1024**3 / memory.total) * 100, 2) if memory.total > 0 else 0,
+                    'cpu_percent': round(max(0, cpu_percent - total_app_cpu - appmanager_cpu), 2)
+                },
+                'other': {
+                    'memory_gb': other_memory_gb,
+                    'memory_percent': round((other_memory_gb * 1024**3 / memory.total) * 100, 2) if memory.total > 0 else 0,
+                    'cpu_percent': 0,  # Hard to track accurately
+                    'disk_gb': other_disk_gb,
+                    'disk_percent': round((other_disk_bytes / disk.total) * 100, 2) if disk.total > 0 else 0
+                }
+            }
+        }
+        
+        # Update cache
+        _resource_cache['data'] = result.copy()
+        _resource_cache['timestamp'] = current_time
+        
+        return jsonify(result)
+    except Exception as e:
+        current_app.logger.error(f"Error getting resource stats: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @bp.route('/uploads/<path:filename>')
 def uploaded_file(filename):
