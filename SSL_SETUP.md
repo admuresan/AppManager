@@ -142,3 +142,4 @@ sudo grep ssl_certificate /etc/nginx/sites-available/appmanager
 - Certificates are automatically detected and used by the deploy script
 - The nginx configuration supports both certificate types seamlessly
 
+

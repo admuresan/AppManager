@@ -119,3 +119,4 @@ Edit `deploy.sh` to change:
 - `VENV_NAME` - Virtual environment name (default: AMvenv)
 - `SERVICE_NAME` - Systemd service name (default: appmanager)
 
+

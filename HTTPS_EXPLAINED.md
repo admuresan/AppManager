@@ -121,3 +121,4 @@ Your site **IS secure** - the encryption is working perfectly. The warning is ju
 
 The functionality is working correctly - HTTPS is active, encryption is working, and your site is secure!
 
+

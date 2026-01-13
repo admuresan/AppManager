@@ -108,7 +108,8 @@ def create_app():
             unique_filename = f"{uuid.uuid4()}_{filename}"
             filepath = logo_dir / unique_filename
             file.save(filepath)
-            logo_path = f"uploads/logos/{unique_filename}"
+            # Store path relative to instance directory (without 'uploads/' prefix since route handles it)
+            logo_path = f"logos/{unique_filename}"
     
     try:
         app_config = AppConfig.create(
@@ -546,5 +547,13 @@ def get_ssl_status():
 def uploaded_file(filename):
     """Serve uploaded files (public access for logos)"""
     instance_path = Path(current_app.instance_path)
-    return send_from_directory(instance_path, filename)
+    # Route is /admin/uploads/<filename>, so filename should be relative to instance/uploads/
+    # If filename is 'logos/file.png', we need to serve 'instance/uploads/logos/file.png'
+    # If filename already includes 'uploads/', strip it (for backward compatibility)
+    if filename.startswith('uploads/'):
+        # Already has uploads/ prefix, use as-is
+        return send_from_directory(instance_path, filename)
+    else:
+        # Prepend 'uploads/' to get correct path relative to instance directory
+        return send_from_directory(instance_path, f'uploads/{filename}')
 

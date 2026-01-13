@@ -25,7 +25,9 @@
             {# Use the select route which handles nginx configuration and port mapping correctly #}
             <a href="{{ url_for('welcome.select_app', app_id=app.id) }}" class="app-link" target="_blank">
                 {% if app.logo %}
-                    <img src="{{ url_for('admin.uploaded_file', filename=app.logo) }}" alt="{{ app.name }}" class="app-logo">
+                    {# Strip 'uploads/' prefix if present since route already includes it #}
+                    {% set logo_filename = app.logo.replace('uploads/', '', 1) if app.logo.startswith('uploads/') else app.logo %}
+                    <img src="{{ url_for('admin.uploaded_file', filename=logo_filename) }}" alt="{{ app.name }}" class="app-logo">
                 {% else %}
                     <div class="app-logo-placeholder">{{ app.name[0].upper() }}</div>
                 {% endif %}
