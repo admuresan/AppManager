@@ -120,3 +120,4 @@ Edit `deploy.sh` to change:
 - `SERVICE_NAME` - Systemd service name (default: appmanager)
 
 
+

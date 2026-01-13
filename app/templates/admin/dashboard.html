@@ -9,15 +9,158 @@
         max-height: 50px;
         object-fit: contain;
     }
+    
+    /* Terminal Styles */
+    .terminal-console {
+        background: #1e1e1e;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 30px;
+        color: #d4d4d4;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .terminal-content {
+        background: #252526;
+        border-radius: 5px;
+        padding: 15px;
+        color: #d4d4d4;
+        font-family: 'Courier New', Courier, 'Liberation Mono', monospace;
+        font-size: 0.9em;
+        min-height: 400px;
+        max-height: 600px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .terminal-output {
+        flex: 1;
+        overflow-y: auto;
+        padding: 15px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    
+    .terminal-output::-webkit-scrollbar {
+        width: 10px;
+    }
+    
+    .terminal-output::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .terminal-output::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 5px;
+    }
+    
+    .terminal-output::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+    
+    .terminal-line {
+        margin: 2px 0;
+        padding: 2px 0;
+    }
+    
+    .terminal-line.command {
+        color: #4ec9b0;
+    }
+    
+    .terminal-line.output {
+        color: #d4d4d4;
+    }
+    
+    .terminal-line.error {
+        color: #f48771;
+    }
+    
+    .terminal-line.success {
+        color: #4ec9b0;
+    }
+    
+    .terminal-line.loading {
+        color: #808080;
+        font-style: italic;
+    }
+    
+    .terminal-input-line {
+        display: flex;
+        align-items: center;
+        padding: 10px 15px;
+        background: rgba(0, 0, 0, 0.3);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .terminal-prompt {
+        color: #4ec9b0;
+        margin-right: 8px;
+        font-weight: bold;
+        user-select: none;
+    }
+    
+    .terminal-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: #d4d4d4;
+        font-family: 'Courier New', Courier, 'Liberation Mono', monospace;
+        font-size: 0.9em;
+        outline: none;
+        padding: 5px 0;
+    }
+    
+    .terminal-input:focus {
+        outline: none;
+    }
+    
+    .terminal-input::placeholder {
+        color: #808080;
+    }
+    
+    .terminal-input:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    /* Collapsible Console Styles */
+    .console-header {
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.2s;
+    }
+    
+    .console-header:hover {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-radius: 5px;
+    }
+    
+    .console-header .chevron {
+        margin-right: 10px;
+        transition: transform 0.3s;
+        display: inline-block;
+        font-size: 0.9em;
+    }
+    
+    .console-header:not(.collapsed) .chevron {
+        transform: rotate(90deg);
+    }
+    
+    .console-content.collapsed,
+    .terminal-content.collapsed {
+        display: none;
+    }
+    
+    .console-header .header-actions-group {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- Manager Icon in Top Right -->
-<a href="{{ url_for('welcome.index') }}" class="manager-icon" title="Back to Welcome">
-    🏠
-</a>
-
 <div class="admin-dashboard">
     <header class="dashboard-header">
         <h1>App Manager Dashboard</h1>
@@ -29,12 +172,31 @@
     
     <!-- Ports Console -->
     <div class="ports-console">
-        <div class="console-header">
-            <h2>Active Ports Console</h2>
-            <button class="btn btn-secondary" onclick="refreshPortsConsole()" style="font-size: 0.9em;">🔄 Refresh</button>
+        <div class="console-header collapsed" onclick="toggleConsole('ports')">
+            <h2><span class="chevron">▶</span>Active Ports Console</h2>
+            <div class="header-actions-group">
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshPortsConsole()">🔄 Refresh</button>
+            </div>
         </div>
-        <div id="ports-console-content" class="console-content">
+        <div id="ports-console-content" class="console-content collapsed">
             <p style="color: #808080; text-align: center; padding: 20px;">Loading active ports...</p>
+        </div>
+    </div>
+    
+    <!-- Terminal Console -->
+    <div class="terminal-console">
+        <div class="console-header collapsed" onclick="toggleConsole('terminal')">
+            <h2><span class="chevron">▶</span>Server Terminal</h2>
+            <div class="header-actions-group">
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); clearTerminal()">🗑️ Clear</button>
+            </div>
+        </div>
+        <div id="terminal-content" class="terminal-content collapsed">
+            <div id="terminal-output" class="terminal-output"></div>
+            <div class="terminal-input-line">
+                <span class="terminal-prompt" id="terminal-prompt-display">~$</span>
+                <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false" placeholder="Type a command and press Enter...">
+            </div>
         </div>
     </div>
     
@@ -67,6 +229,7 @@
                                 <a href="#" onclick="testApp('{{ app.id }}'); return false;">Test</a>
                                 <a href="#" onclick="fixSSL('{{ app.id }}'); return false;">Fix SSL</a>
                                 <a href="#" onclick="restartApp('{{ app.id }}'); return false;">Restart</a>
+                                <a href="{{ url_for('admin.view_logs', app_id=app.id) }}" target="_blank">See Logs</a>
                                 <a href="#" onclick="deleteApp('{{ app.id }}'); return false;" class="danger">Delete</a>
                             </div>
                         </div>
@@ -142,25 +305,8 @@
         <div id="test-results-content" class="test-results-content">
             <!-- Test results will be populated here -->
         </div>
-        <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" onclick="closeTestResultsModal()">Close</button>
-        </div>
     </div>
 </div>
-
-<!-- Test Results Modal -->
-<div id="test-results-modal" class="modal">
-    <div class="modal-content test-results-modal-content">
-        <div class="modal-header">
-            <h2>Test Results</h2>
-            <button class="modal-close" onclick="closeTestResultsModal()">&times;</button>
-        </div>
-        <div id="test-results-content" class="test-results-content">
-            <!-- Test results will be populated here -->
-        </div>
-        <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" onclick="closeTestResultsModal()">Close</button>
-        </div>
     </div>
 </div>
 
@@ -314,10 +460,369 @@ async function refreshPortsConsole() {
     }
 }
 
+// Toggle console collapse/expand
+function toggleConsole(type) {
+    const header = document.querySelector(`.${type === 'ports' ? 'ports-console' : 'terminal-console'} .console-header`);
+    const content = document.getElementById(type === 'ports' ? 'ports-console-content' : 'terminal-content');
+    
+    if (header && content) {
+        const isCollapsed = header.classList.contains('collapsed');
+        
+        if (isCollapsed) {
+            header.classList.remove('collapsed');
+            content.classList.remove('collapsed');
+        } else {
+            header.classList.add('collapsed');
+            content.classList.add('collapsed');
+        }
+    }
+}
+
 // Load ports console on page load
 document.addEventListener('DOMContentLoaded', () => {
     refreshPortsConsole();
+    initializeTerminal();
 });
+
+// Terminal functionality
+let terminalHistory = [];
+let terminalHistoryIndex = -1;
+let currentCommand = '';
+let currentWorkingDirectory = '~';
+let autocompleteMatches = [];
+let autocompleteIndex = -1;
+let lastAutocompleteQuery = '';
+
+function updateTerminalPrompt() {
+    const promptDisplay = document.getElementById('terminal-prompt-display');
+    if (promptDisplay) {
+        const displayDir = currentWorkingDirectory === '~' ? '~' : currentWorkingDirectory;
+        promptDisplay.textContent = displayDir + '$';
+    }
+}
+
+function initializeTerminal() {
+    const terminalInput = document.getElementById('terminal-input');
+    const terminalOutput = document.getElementById('terminal-output');
+    
+    if (!terminalInput || !terminalOutput) return;
+    
+    // Update prompt display
+    updateTerminalPrompt();
+    
+    // Welcome message
+    addTerminalLine('output', 'Welcome to AppManager Server Terminal');
+    addTerminalLine('output', 'Type commands to execute on the server. Use "help" for available commands.');
+    addTerminalLine('output', 'Press TAB for file/folder autocomplete.');
+    addTerminalLine('output', '');
+    
+    // Focus input
+    terminalInput.focus();
+    
+    // Handle Enter key
+    terminalInput.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const command = terminalInput.value.trim();
+            if (command) {
+                executeCommand(command);
+                terminalInput.value = '';
+                terminalHistoryIndex = -1;
+                autocompleteMatches = [];
+                autocompleteIndex = -1;
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (terminalHistory.length > 0) {
+                if (terminalHistoryIndex === -1) {
+                    currentCommand = terminalInput.value;
+                    terminalHistoryIndex = terminalHistory.length;
+                }
+                terminalHistoryIndex = Math.max(0, terminalHistoryIndex - 1);
+                terminalInput.value = terminalHistory[terminalHistoryIndex];
+                autocompleteMatches = [];
+                autocompleteIndex = -1;
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (terminalHistoryIndex >= 0) {
+                terminalHistoryIndex = Math.min(terminalHistory.length - 1, terminalHistoryIndex + 1);
+                if (terminalHistoryIndex === terminalHistory.length - 1) {
+                    terminalInput.value = currentCommand;
+                    terminalHistoryIndex = -1;
+                } else {
+                    terminalInput.value = terminalHistory[terminalHistoryIndex];
+                }
+                autocompleteMatches = [];
+                autocompleteIndex = -1;
+            }
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            await handleTabCompletion(terminalInput);
+        }
+    });
+    
+    // Keep focus on input when clicking terminal
+    terminalOutput.addEventListener('click', () => {
+        terminalInput.focus();
+    });
+}
+
+async function handleTabCompletion(input) {
+    const value = input.value;
+    const cursorPos = input.selectionStart;
+    
+    // Extract the word at cursor position (could be a path)
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const textAfterCursor = value.substring(cursorPos);
+    
+    // Find the start of the current word/path
+    // Look for spaces or start of line
+    let wordStart = textBeforeCursor.length;
+    for (let i = textBeforeCursor.length - 1; i >= 0; i--) {
+        if (textBeforeCursor[i] === ' ' || textBeforeCursor[i] === '\t') {
+            wordStart = i + 1;
+            break;
+        }
+        if (i === 0) {
+            wordStart = 0;
+        }
+    }
+    
+    const partialPath = textBeforeCursor.substring(wordStart);
+    
+    // If no partial path, don't autocomplete
+    if (!partialPath) {
+        return;
+    }
+    
+    // Get autocomplete suggestions
+    try {
+        const response = await fetch('/admin/api/terminal/autocomplete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                path: partialPath,
+                cwd: currentWorkingDirectory
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.matches && result.matches.length > 0) {
+            // Check if this is the same query (for cycling through matches)
+            if (partialPath === lastAutocompleteQuery && autocompleteMatches.length > 0) {
+                // Cycle to next match
+                autocompleteIndex = (autocompleteIndex + 1) % autocompleteMatches.length;
+            } else {
+                // New query, reset
+                autocompleteMatches = result.matches;
+                autocompleteIndex = 0;
+                lastAutocompleteQuery = partialPath;
+            }
+            
+            const match = autocompleteMatches[autocompleteIndex];
+            const dirPart = partialPath.includes('/') ? partialPath.substring(0, partialPath.lastIndexOf('/') + 1) : '';
+            const completedPath = dirPart + match.name;
+            
+            // If it's a directory, add trailing slash
+            const finalPath = match.is_directory ? completedPath + '/' : completedPath;
+            
+            // Replace the partial path with completed path
+            const newValue = textBeforeCursor.substring(0, wordStart) + finalPath + textAfterCursor;
+            input.value = newValue;
+            
+            // Set cursor position after completed path
+            const newCursorPos = wordStart + finalPath.length;
+            input.setSelectionRange(newCursorPos, newCursorPos);
+            
+            // If multiple matches, show hint
+            if (autocompleteMatches.length > 1) {
+                // Show matches in terminal (temporary, will be cleared on next command)
+                const matchList = autocompleteMatches.map((m, i) => {
+                    const marker = i === autocompleteIndex ? '>' : ' ';
+                    const type = m.is_directory ? '/' : '';
+                    return `${marker} ${m.name}${type}`;
+                }).join('  ');
+                
+                // Add hint line (will be cleared when user types)
+                const hintLine = document.createElement('div');
+                hintLine.className = 'terminal-line output';
+                hintLine.style.color = '#808080';
+                hintLine.style.fontSize = '0.85em';
+                hintLine.textContent = `Matches (${autocompleteIndex + 1}/${autocompleteMatches.length}): ${matchList}`;
+                hintLine.id = 'autocomplete-hint';
+                
+                // Remove previous hint if exists
+                const prevHint = document.getElementById('autocomplete-hint');
+                if (prevHint) {
+                    prevHint.remove();
+                }
+                
+                const terminalOutput = document.getElementById('terminal-output');
+                terminalOutput.appendChild(hintLine);
+                terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            }
+        }
+    } catch (error) {
+        // Silently fail on autocomplete errors
+        console.error('Autocomplete error:', error);
+    }
+}
+
+function addTerminalLine(type, text) {
+    const terminalOutput = document.getElementById('terminal-output');
+    if (!terminalOutput) return;
+    
+    const line = document.createElement('div');
+    line.className = `terminal-line ${type}`;
+    line.textContent = text;
+    terminalOutput.appendChild(line);
+    
+    // Auto-scroll to bottom
+    terminalOutput.scrollTop = terminalOutput.scrollHeight;
+}
+
+function clearTerminal() {
+    const terminalOutput = document.getElementById('terminal-output');
+    if (terminalOutput) {
+        terminalOutput.innerHTML = '';
+        addTerminalLine('output', 'Terminal cleared.');
+        addTerminalLine('output', '');
+    }
+}
+
+async function executeCommand(command) {
+    const terminalOutput = document.getElementById('terminal-output');
+    const terminalInput = document.getElementById('terminal-input');
+    
+    if (!terminalOutput || !terminalInput) return;
+    
+    // Remove autocomplete hint if exists
+    const hint = document.getElementById('autocomplete-hint');
+    if (hint) {
+        hint.remove();
+    }
+    
+    // Reset autocomplete state
+    autocompleteMatches = [];
+    autocompleteIndex = -1;
+    lastAutocompleteQuery = '';
+    
+    // Add command to history
+    if (command && (terminalHistory.length === 0 || terminalHistory[terminalHistory.length - 1] !== command)) {
+        terminalHistory.push(command);
+        if (terminalHistory.length > 100) {
+            terminalHistory.shift(); // Keep last 100 commands
+        }
+    }
+    
+    // Display command with current directory
+    const promptDir = currentWorkingDirectory === '~' ? '~' : currentWorkingDirectory;
+    addTerminalLine('command', `${promptDir}$ ${command}`);
+    
+    // Handle special commands
+    if (command === 'clear' || command === 'cls') {
+        clearTerminal();
+        return;
+    }
+    
+    // Note: cd command handling is now done server-side and returned in response
+    
+    if (command === 'help') {
+        addTerminalLine('output', 'Available commands:');
+        addTerminalLine('output', '  ls, cd, pwd, cat, head, tail, grep, find');
+        addTerminalLine('output', '  ps, df, du, free, uptime, whoami, uname');
+        addTerminalLine('output', '  systemctl, journalctl, netstat, ss');
+        addTerminalLine('output', '  git, python3, pip, npm, docker');
+        addTerminalLine('output', '  nginx, certbot, ufw, iptables');
+        addTerminalLine('output', '');
+        addTerminalLine('output', 'Shell Scripts:');
+        addTerminalLine('output', '  bash script.sh - Run a shell script');
+        addTerminalLine('output', '  sh script.sh - Run a shell script');
+        addTerminalLine('output', '  ./script.sh - Run an executable script');
+        addTerminalLine('output', '  Scripts must be in: ~, /opt/appmanager, or /tmp');
+        addTerminalLine('output', '');
+        addTerminalLine('output', 'Terminal Commands:');
+        addTerminalLine('output', '  clear - Clear terminal');
+        addTerminalLine('output', '  help - Show this help message');
+        addTerminalLine('output', '');
+        return;
+    }
+    
+    // Show loading indicator
+    const loadingLine = document.createElement('div');
+    loadingLine.className = 'terminal-line loading';
+    loadingLine.textContent = 'Executing...';
+    terminalOutput.appendChild(loadingLine);
+    terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    
+    // Disable input during execution
+    terminalInput.disabled = true;
+    
+    try {
+        const response = await fetch('/admin/api/terminal/execute', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                command: command,
+                cwd: currentWorkingDirectory
+            })
+        });
+        
+        // Remove loading indicator
+        loadingLine.remove();
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update working directory if returned
+            if (result.cwd) {
+                currentWorkingDirectory = result.cwd;
+                updateTerminalPrompt();
+            }
+            
+            // Display output
+            if (result.output) {
+                const lines = result.output.split('\n');
+                lines.forEach(line => {
+                    addTerminalLine('output', line);
+                });
+            } else {
+                // For cd command, don't show "(no output)" - it's normal
+                if (!command.startsWith('cd ')) {
+                    addTerminalLine('output', '(no output)');
+                }
+            }
+            
+            // Show exit code if non-zero
+            if (result.exit_code !== 0) {
+                addTerminalLine('error', `[Exit code: ${result.exit_code}]`);
+            }
+        } else {
+            // Even on error, update cwd if provided (to maintain state)
+            if (result.cwd) {
+                currentWorkingDirectory = result.cwd;
+                updateTerminalPrompt();
+            }
+            addTerminalLine('error', `Error: ${result.error || 'Unknown error'}`);
+            if (result.hint) {
+                addTerminalLine('output', result.hint);
+            }
+        }
+    } catch (error) {
+        loadingLine.remove();
+        addTerminalLine('error', `Network error: ${error.message}`);
+    } finally {
+        terminalInput.disabled = false;
+        terminalInput.focus();
+        addTerminalLine('output', ''); // Empty line after command
+    }
+}
 
 document.getElementById('app-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -418,10 +923,20 @@ async function testApp(appId) {
         // HTTP test
         html += '<div class="test-section">';
         html += '<h3>HTTP Test (Port ' + result.port + ')</h3>';
-        html += '<div class="test-result ' + (result.http.accessible ? 'success' : 'error') + '">';
+        const httpIsSuccessful = result.http.accessible && result.http.successful;
+        html += '<div class="test-result ' + (httpIsSuccessful ? 'success' : 'error') + '">';
         if (result.http.accessible) {
             const status = typeof result.http.status === 'number' ? 'HTTP ' + result.http.status : result.http.status;
-            html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+            if (result.http.successful) {
+                html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+            } else {
+                html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
+                if (typeof result.http.status === 'number' && result.http.status === 404) {
+                    html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
+                } else if (typeof result.http.status === 'number' && result.http.status >= 500) {
+                    html += '<div class="test-warning">⚠ Server error (' + result.http.status + ') - App is returning an error</div>';
+                }
+            }
         } else {
             html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.http.status + '</span>';
         }
@@ -432,19 +947,109 @@ async function testApp(appId) {
         // HTTPS test
         html += '<div class="test-section">';
         html += '<h3>HTTPS Test (Port ' + result.https.port + ')</h3>';
-        html += '<div class="test-result ' + (result.https.accessible ? 'success' : 'error') + '">';
+        const httpsIsSuccessful = result.https.accessible && result.https.successful;
+        html += '<div class="test-result ' + (httpsIsSuccessful ? 'success' : 'error') + '">';
         if (result.https.accessible) {
             const status = typeof result.https.status === 'number' ? 'HTTP ' + result.https.status : result.https.status;
-            html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
-            if (result.https.status === 'SSL_ERROR') {
-                html += '<div class="test-warning">⚠ SSL certificate issue detected (certificate not trusted)</div>';
+            if (result.https.successful) {
+                html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+            } else {
+                html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
+                if (result.https.status === 'SSL_ERROR') {
+                    html += '<div class="test-warning">⚠ SSL certificate issue detected (certificate not trusted)</div>';
+                } else if (typeof result.https.status === 'number' && result.https.status === 404) {
+                    html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
+                } else if (typeof result.https.status === 'number' && result.https.status >= 500) {
+                    html += '<div class="test-warning">⚠ Server error (' + result.https.status + ') - App is returning an error</div>';
+                }
             }
         } else {
             html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.https.status + '</span>';
         }
         html += '</div>';
         html += '<div class="test-url"><strong>URL:</strong> <code>' + result.https.url + '</code></div>';
+        
+        // SSL Certificate Status
+        if (result.https.certificate_status) {
+            const certStatus = result.https.certificate_status;
+            html += '<div class="test-cert-info" style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;">';
+            html += '<strong>SSL Certificate Status:</strong><br>';
+            html += '• Nginx Configured: ' + (certStatus.nginx_configured ? '✓ Yes' : '✗ No') + '<br>';
+            html += '• Certificate Exists: ' + (certStatus.certificate_exists ? '✓ Yes' : '✗ No') + '<br>';
+            html += '• Certificate Trusted: ' + (certStatus.certificate_trusted ? '✓ Yes (Let\'s Encrypt)' : '✗ No') + '<br>';
+            if (certStatus.certificate_path) {
+                html += '• Certificate Path: <code style="font-size: 0.9em;">' + certStatus.certificate_path + '</code><br>';
+            }
+            if (certStatus.certificate_info) {
+                const certInfo = certStatus.certificate_info;
+                if (certInfo.issuer) {
+                    html += '• Issuer: ' + (certInfo.issuer.get('organizationName') || certInfo.issuer.get('CN') || 'Unknown') + '<br>';
+                }
+                if (certInfo.expires) {
+                    html += '• Expires: ' + certInfo.expires + '<br>';
+                }
+                if (certInfo.error) {
+                    html += '• Error: <span style="color: #f48771;">' + certInfo.error + '</span><br>';
+                }
+            }
+            if (certStatus.error) {
+                html += '• Error: <span style="color: #f48771;">' + certStatus.error + '</span><br>';
+            }
+            html += '</div>';
+        }
         html += '</div>';
+        
+        // Masked Path Test (HTTP)
+        if (result.masked_path && result.masked_path.http) {
+            html += '<div class="test-section">';
+            html += '<h3>Masked Path Test - HTTP (/' + result.app_slug + '/)</h3>';
+            const maskedHttpSuccessful = result.masked_path.http.accessible && result.masked_path.http.successful;
+            html += '<div class="test-result ' + (maskedHttpSuccessful ? 'success' : 'error') + '">';
+            if (result.masked_path.http.accessible) {
+                const status = typeof result.masked_path.http.status === 'number' ? 'HTTP ' + result.masked_path.http.status : result.masked_path.http.status;
+                if (result.masked_path.http.successful) {
+                    html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+                } else {
+                    html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
+                    if (typeof result.masked_path.http.status === 'number' && result.masked_path.http.status === 404) {
+                        html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
+                    } else if (typeof result.masked_path.http.status === 'number' && result.masked_path.http.status >= 500) {
+                        html += '<div class="test-warning">⚠ Server error (' + result.masked_path.http.status + ') - App is returning an error</div>';
+                    }
+                }
+            } else {
+                html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.masked_path.http.status + '</span>';
+            }
+            html += '</div>';
+            html += '<div class="test-url"><strong>URL:</strong> <code>' + result.masked_path.http.url + '</code></div>';
+            html += '</div>';
+        }
+        
+        // Masked Path Test (HTTPS)
+        if (result.masked_path && result.masked_path.https) {
+            html += '<div class="test-section">';
+            html += '<h3>Masked Path Test - HTTPS (/' + result.app_slug + '/)</h3>';
+            const maskedHttpsSuccessful = result.masked_path.https.accessible && result.masked_path.https.successful;
+            html += '<div class="test-result ' + (maskedHttpsSuccessful ? 'success' : 'error') + '">';
+            if (result.masked_path.https.accessible) {
+                const status = typeof result.masked_path.https.status === 'number' ? 'HTTP ' + result.masked_path.https.status : result.masked_path.https.status;
+                if (result.masked_path.https.successful) {
+                    html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+                } else {
+                    html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
+                    if (typeof result.masked_path.https.status === 'number' && result.masked_path.https.status === 404) {
+                        html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
+                    } else if (typeof result.masked_path.https.status === 'number' && result.masked_path.https.status >= 500) {
+                        html += '<div class="test-warning">⚠ Server error (' + result.masked_path.https.status + ') - App is returning an error</div>';
+                    }
+                }
+            } else {
+                html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.masked_path.https.status + '</span>';
+            }
+            html += '</div>';
+            html += '<div class="test-url"><strong>URL:</strong> <code>' + result.masked_path.https.url + '</code></div>';
+            html += '</div>';
+        }
         
         html += '</div>';
         

@@ -143,3 +143,4 @@ sudo grep ssl_certificate /etc/nginx/sites-available/appmanager
 - The nginx configuration supports both certificate types seamlessly
 
 
+

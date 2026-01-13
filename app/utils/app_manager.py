@@ -19,6 +19,67 @@ def test_app_port(port):
     except:
         return False
 
+def check_port_status(port):
+    """
+    Check detailed status of a specific port.
+    Returns a dict with listening status, PID, service name, and process name.
+    """
+    result = {
+        'port': port,
+        'is_listening': False,
+        'pid': None,
+        'service_name': None,
+        'process_name': None,
+        'detection_method': None
+    }
+    
+    # First, test if port is listening via socket
+    result['is_listening'] = test_app_port(port)
+    
+    # Try to get PID using _get_pid_by_port
+    pid = _get_pid_by_port(port)
+    if pid:
+        result['pid'] = pid
+        result['detection_method'] = 'pid_detection'
+        
+        # Try to get service name from PID
+        service_name = _get_service_by_pid(pid)
+        if service_name:
+            result['service_name'] = service_name
+        
+        # Get process name
+        try:
+            proc = psutil.Process(pid)
+            result['process_name'] = proc.name()
+        except:
+            pass
+    
+    # If no PID found but port is listening, try service detection by port
+    if not result['pid'] and result['is_listening']:
+        service_name = detect_service_name_by_port(port)
+        if service_name:
+            result['service_name'] = service_name
+            result['detection_method'] = 'service_detection'
+    
+    # Also check using psutil directly
+    if not result['pid']:
+        try:
+            for conn in psutil.net_connections(kind='inet'):
+                if conn.laddr.port == port and conn.status == 'LISTEN':
+                    if conn.pid:
+                        result['pid'] = conn.pid
+                        result['detection_method'] = 'psutil'
+                        try:
+                            proc = psutil.Process(conn.pid)
+                            result['process_name'] = proc.name()
+                        except:
+                            pass
+                        break
+        except:
+            pass
+    
+    return result
+
 def restart_app_service(service_name):
     """Restart a systemd service"""
     try:
@@ -236,10 +297,53 @@ def _get_service_by_pid(pid):
     except:
         return None
 
+def _should_exclude_port(port, service_name=None, process_name=None):
+    """
+    Determine if a port should be excluded from the active ports list.
+    Excludes system ports, web server ports, and AppManager itself.
+    """
+    # Exclude AppManager port (5000)
+    if port == 5000:
+        return True
+    
+    # Exclude standard web server ports
+    if port in (80, 443):
+        return True
+    
+    # Exclude well-known system ports (0-1023)
+    if port < 1024:
+        return True
+    
+    # Exclude common system service names
+    system_services = [
+        'ssh', 'sshd', 'nginx', 'apache2', 'httpd', 'mysql', 'mysqld',
+        'postgresql', 'postgres', 'redis', 'redis-server', 'mongod', 'mongodb',
+        'systemd', 'systemd-resolved', 'systemd-networkd', 'dbus', 'NetworkManager',
+        'cron', 'rsyslog', 'syslog', 'journald', 'logrotate', 'snapd',
+        'ufw', 'firewalld', 'iptables', 'fail2ban', 'unattended-upgrades',
+        'apparmor', 'polkit', 'gdm', 'lightdm', 'xrdp', 'vnc', 'tigervnc'
+    ]
+    
+    if service_name:
+        service_lower = service_name.lower()
+        # Remove .service suffix if present
+        if service_lower.endswith('.service'):
+            service_lower = service_lower[:-8]
+        if service_lower in system_services:
+            return True
+    
+    if process_name:
+        process_lower = process_name.lower()
+        if process_lower in system_services:
+            return True
+    
+    return False
+
 def get_active_ports_and_services():
     """
     Get a list of all active ports on localhost and their associated service names.
     Returns a list of dicts with port, service_name, and pid.
+    Excludes system ports, web server ports (80/443), and AppManager port (5000).
     """
     active_ports = []
     
@@ -251,17 +355,21 @@ def get_active_ports_and_services():
                 if conn.status == 'LISTEN' and conn.laddr.ip in ('127.0.0.1', '0.0.0.0', '::', '::1'):
                     port = conn.laddr.port
                     pid = conn.pid
+                    process_name = None
                     if pid:
                         try:
                             proc = psutil.Process(pid)
-                            name = proc.name()
+                            process_name = proc.name()
                         except:
-                            name = None
+                            pass
+                    
+                    # Filter out excluded ports
+                    if not _should_exclude_port(port, process_name=process_name):
                         active_ports.append({
                             'port': port,
                             'service_name': None,
                             'pid': pid,
-                            'process_name': name
+                            'process_name': process_name
                         })
         except:
             pass
@@ -271,7 +379,7 @@ def get_active_ports_and_services():
         # Get all listening ports
         ports_used = {}
         
-        # Method 1: Use ss to get ports and PIDs
+        # Method 1: Use ss to get ports and PIDs (improved to include ports without PIDs)
         try:
             result = subprocess.run(
                 ['ss', '-tlnp'],
@@ -283,29 +391,58 @@ def get_active_ports_and_services():
                 for line in result.stdout.split('\n'):
                     if 'LISTEN' in line:
                         # Parse line like: "LISTEN 0 128 *:5001 *:* users:(("python3",pid=12345,fd=3))"
-                        port_match = re.search(r':(\d+)\s', line)
-                        pid_match = re.search(r'pid=(\d+)', line)
-                        if port_match and pid_match:
+                        # or: "LISTEN 0 128 *:6002 *:*"
+                        port_match = re.search(r':(\d+)(\s|$)', line)
+                        if port_match:
                             port = int(port_match.group(1))
-                            pid = int(pid_match.group(1))
+                            # Try to extract PID, but don't require it
+                            pid_match = re.search(r'pid=(\d+)', line)
+                            pid = int(pid_match.group(1)) if pid_match else None
                             if port not in ports_used:
                                 ports_used[port] = {'pid': pid}
         except:
             pass
         
-        # Method 2: Use psutil as fallback
+        # Method 2: Use ss without -p flag to get all ports (including those without PID info)
+        try:
+            result = subprocess.run(
+                ['ss', '-tln'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if 'LISTEN' in line:
+                        port_match = re.search(r':(\d+)(\s|$)', line)
+                        if port_match:
+                            port = int(port_match.group(1))
+                            # Only add if we haven't seen this port yet
+                            if port not in ports_used:
+                                ports_used[port] = {'pid': None}
+        except:
+            pass
+        
+        # Method 3: Use psutil as fallback (include ports even without PID)
         try:
             for conn in psutil.net_connections(kind='inet'):
                 if conn.status == 'LISTEN' and conn.laddr.ip in ('127.0.0.1', '0.0.0.0', '::', '::1'):
                     port = conn.laddr.port
                     pid = conn.pid
-                    if port not in ports_used and pid:
+                    if port not in ports_used:
+                        ports_used[port] = {'pid': pid}
+                    elif ports_used[port].get('pid') is None and pid:
+                        # Update with PID if we found one
                         ports_used[port] = {'pid': pid}
         except:
             pass
         
         # For each port, try to find the service name
         for port, info in ports_used.items():
+            # Skip excluded ports early
+            if _should_exclude_port(port):
+                continue
+            
             pid = info.get('pid')
             service_name = None
             
@@ -316,12 +453,28 @@ def get_active_ports_and_services():
                 # If not found, try detection by port
                 if not service_name:
                     service_name = detect_service_name_by_port(port)
+            else:
+                # Even without PID, try to detect service by port
+                service_name = detect_service_name_by_port(port)
+            
+            # Get process name if PID is available
+            process_name = None
+            if pid:
+                try:
+                    proc = psutil.Process(pid)
+                    process_name = proc.name()
+                except:
+                    pass
+            
+            # Final check: exclude if service or process name indicates system service
+            if _should_exclude_port(port, service_name=service_name, process_name=process_name):
+                continue
             
             active_ports.append({
                 'port': port,
                 'service_name': service_name,
                 'pid': pid,
-                'process_name': None
+                'process_name': process_name
             })
         
         # Sort by port number
@@ -448,4 +601,122 @@ def configure_firewall_port(port, action='allow'):
     combined_message = "; ".join(messages)
     
     return overall_success, combined_message
+
+def get_app_logs(service_name, lines=500, since=None, until=None):
+    """
+    Get logs from systemd journalctl for a given service.
+    
+    Args:
+        service_name: Systemd service name (e.g., 'calculator.service')
+        lines: Number of log lines to retrieve (default: 500)
+        since: Start timestamp (ISO format or 'YYYY-MM-DD HH:MM:SS')
+        until: End timestamp (ISO format or 'YYYY-MM-DD HH:MM:SS')
+    
+    Returns:
+        tuple: (success: bool, logs: str or error message: str, oldest_timestamp: str or None, newest_timestamp: str or None)
+    """
+    # Only works on Linux with systemd
+    if platform.system() != 'Linux':
+        return False, "Logs are only available on Linux systems with systemd", None, None
+    
+    if not service_name:
+        return False, "Service name is required to view logs", None, None
+    
+    try:
+        # Build journalctl command
+        cmd = ['sudo', 'journalctl', '-u', service_name, '--no-pager']
+        
+        # Add timestamp filters if provided
+        if since:
+            cmd.extend(['--since', since])
+        if until:
+            cmd.extend(['--until', until])
+        
+        # If no timestamps, use -n for last N lines
+        if not since and not until:
+            cmd.extend(['-n', str(lines)])
+        else:
+            # When using timestamps, limit output
+            cmd.extend(['-n', str(lines)])
+        
+        # Use --output=short-iso for consistent timestamp format
+        cmd.append('--output=short-iso')
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            logs = result.stdout
+            oldest_ts, newest_ts = _extract_timestamps_from_logs(logs)
+            return True, logs, oldest_ts, newest_ts
+        else:
+            # Try without sudo if that fails
+            cmd[0] = 'journalctl'
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                logs = result.stdout
+                oldest_ts, newest_ts = _extract_timestamps_from_logs(logs)
+                return True, logs, oldest_ts, newest_ts
+            else:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                # Provide helpful error messages for common issues
+                if "Permission denied" in error_msg or "Access denied" in error_msg:
+                    return False, f"Permission denied accessing logs. The AppManager user needs sudo access or membership in systemd-journal group. Error: {error_msg}", None, None
+                elif "No entries" in error_msg or "No journal files" in error_msg:
+                    return False, f"No logs found for service '{service_name}'. The service may not exist or have no log entries.", None, None
+                else:
+                    return False, f"Failed to retrieve logs: {error_msg}", None, None
+    
+    except subprocess.TimeoutExpired:
+        return False, "Log retrieval timed out", None, None
+    except FileNotFoundError:
+        return False, "journalctl command not found (systemd not available)", None, None
+    except Exception as e:
+        return False, f"Error retrieving logs: {str(e)}", None, None
+
+def _extract_timestamps_from_logs(logs):
+    """
+    Extract oldest and newest timestamps from journalctl output.
+    
+    Args:
+        logs: Log output string from journalctl
+    
+    Returns:
+        tuple: (oldest_timestamp: str or None, newest_timestamp: str or None)
+    """
+    if not logs or not logs.strip():
+        return None, None
+    
+    lines = logs.strip().split('\n')
+    timestamps = []
+    
+    # journalctl short-iso format: "2024-01-01T12:00:00+0000 hostname service[pid]: message"
+    # Pattern: YYYY-MM-DDTHH:MM:SS (with optional timezone)
+    import re
+    # Match timestamp with optional timezone: 2024-01-01T12:00:00 or 2024-01-01T12:00:00+0000
+    timestamp_pattern = r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?)'
+    
+    for line in lines:
+        match = re.search(timestamp_pattern, line)
+        if match:
+            ts = match.group(1)
+            # Keep full timestamp including timezone for API calls
+            timestamps.append(ts)
+    
+    if not timestamps:
+        return None, None
+    
+    # Sort to get oldest and newest
+    timestamps.sort()
+    return timestamps[0], timestamps[-1]
 

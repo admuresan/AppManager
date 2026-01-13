@@ -1,0 +1,552 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - {{ app_name }} - AppManager{% endblock %}
+
+{% block extra_head %}
+<style>
+    .logs-page {
+        padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .logs-header {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .logs-header h1 {
+        margin: 0;
+        font-size: 1.8em;
+        color: #fff;
+    }
+    
+    .logs-header-info {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .logs-header-info p {
+        margin: 0;
+        color: #b0b0b0;
+        font-size: 0.9em;
+    }
+    
+    .logs-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-end;
+    }
+    
+    .logs-controls-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    
+    .logs-container {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        overflow-x: auto;
+        position: relative;
+    }
+    
+    .logs-content-wrapper {
+        position: relative;
+        max-height: 70vh;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+    }
+    
+    .logs-content {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+        line-height: 1.6;
+        color: #e0e0e0;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        padding: 15px;
+        min-height: 100%;
+    }
+    
+    .logs-content-wrapper::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    .logs-content-wrapper::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 5px;
+    }
+    
+    .logs-content-wrapper::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 5px;
+    }
+    
+    .logs-content-wrapper::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+    
+    .loading-indicator {
+        text-align: center;
+        padding: 15px;
+        color: #667eea;
+        font-size: 0.9em;
+        background: rgba(102, 126, 234, 0.1);
+        border-top: 1px solid rgba(102, 126, 234, 0.3);
+        border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+    }
+    
+    .loading-indicator.top {
+        border-top: none;
+        border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+    }
+    
+    .loading-indicator.bottom {
+        border-top: 1px solid rgba(102, 126, 234, 0.3);
+        border-bottom: none;
+    }
+    
+    .logs-error {
+        background: rgba(220, 53, 69, 0.2);
+        border: 1px solid rgba(220, 53, 69, 0.5);
+        border-radius: 8px;
+        padding: 20px;
+        color: #ff6b6b;
+    }
+    
+    .logs-error h3 {
+        margin-top: 0;
+        color: #ff6b6b;
+    }
+    
+    .logs-empty {
+        text-align: center;
+        padding: 40px;
+        color: #808080;
+    }
+    
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9em;
+        transition: all 0.3s;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+    }
+    
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: #e0e0e0;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .lines-selector {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .lines-selector label {
+        color: #b0b0b0;
+        font-size: 0.9em;
+        white-space: nowrap;
+    }
+    
+    .lines-selector select {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 8px 12px;
+        color: #e0e0e0;
+        font-size: 0.9em;
+        cursor: pointer;
+        min-width: 80px;
+    }
+    
+    .lines-selector select:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .lines-selector select:focus {
+        outline: none;
+        border-color: #667eea;
+        background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .auto-refresh {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .auto-refresh input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .auto-refresh label {
+        cursor: pointer;
+        user-select: none;
+        color: #b0b0b0;
+        font-size: 0.9em;
+    }
+    
+    .btn-refresh-icon {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-size: 1.2em;
+        color: #e0e0e0;
+        padding: 0;
+    }
+    
+    .btn-refresh-icon:hover {
+        background: rgba(102, 126, 234, 0.3);
+        border-color: rgba(102, 126, 234, 0.5);
+        transform: rotate(180deg);
+        color: #fff;
+    }
+    
+    .btn-refresh-icon:active {
+        transform: rotate(360deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Manager Icon in Top Right -->
+<a href="{{ url_for('admin.dashboard') }}" class="manager-icon" title="Back to Dashboard">
+    ⚙️
+</a>
+
+<div class="logs-page">
+    <div class="logs-header">
+        <div>
+            <h1>Logs: {{ app_name }}</h1>
+            <div class="logs-header-info">
+                <p><strong>Port:</strong> {{ app.port }}</p>
+                {% if service_name %}
+                <p><strong>Service:</strong> {{ service_name }}</p>
+                {% else %}
+                <p><strong>Service:</strong> <em>Not configured</em></p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="logs-controls">
+            <div class="logs-controls-row">
+                <div class="lines-selector">
+                    <label for="lines-select">Lines:</label>
+                    <select id="lines-select" onchange="updateLines()">
+                        <option value="100" {% if lines == 100 %}selected{% endif %}>100</option>
+                        <option value="500" {% if lines == 500 %}selected{% endif %}>500</option>
+                        <option value="1000" {% if lines == 1000 %}selected{% endif %}>1,000</option>
+                        <option value="2000" {% if lines == 2000 %}selected{% endif %}>2,000</option>
+                        <option value="5000" {% if lines == 5000 %}selected{% endif %}>5,000</option>
+                    </select>
+                </div>
+                <button class="btn-refresh-icon" onclick="refreshLogs()" title="Refresh logs">🔄</button>
+                <div class="auto-refresh">
+                    <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()">
+                    <label for="auto-refresh">Auto-refresh</label>
+                </div>
+            </div>
+            <div class="logs-controls-row">
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">← Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="logs-container">
+        {% if error %}
+        <div class="logs-error">
+            <h3>⚠️ Error Loading Logs</h3>
+            <p>{{ error }}</p>
+            {% if not service_name %}
+            <p><strong>Note:</strong> To view logs, please configure a service name for this app in the Edit dialog.</p>
+            {% endif %}
+        </div>
+        {% elif logs %}
+        <div class="logs-content-wrapper" id="logs-wrapper">
+            <div id="loading-top" class="loading-indicator top" style="display: none;">Loading older logs...</div>
+            <div class="logs-content" id="logs-content">{{ logs }}</div>
+            <div id="loading-bottom" class="loading-indicator bottom" style="display: none;">Loading newer logs...</div>
+        </div>
+        {% else %}
+        <div class="logs-empty">
+            <p>No logs available</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+let autoRefreshInterval = null;
+let currentLines = {{ lines }};
+let oldestTimestamp = {{ oldest_timestamp|tojson if oldest_timestamp else 'null' }};
+let newestTimestamp = {{ newest_timestamp|tojson if newest_timestamp else 'null' }};
+let isLoadingOlder = false;
+let isLoadingNewer = false;
+let hasMoreOlder = true;
+let hasMoreNewer = true;
+
+const appId = {{ app.id|tojson }};
+const logsContent = document.getElementById('logs-content');
+const logsWrapper = document.getElementById('logs-wrapper');
+
+function updateLines() {
+    const select = document.getElementById('lines-select');
+    const lines = select.value;
+    window.location.href = `{{ url_for('admin.view_logs', app_id=app.id) }}?lines=${lines}`;
+}
+
+function refreshLogs() {
+    const lines = document.getElementById('lines-select').value;
+    window.location.href = `{{ url_for('admin.view_logs', app_id=app.id) }}?lines=${lines}`;
+}
+
+function toggleAutoRefresh() {
+    const checkbox = document.getElementById('auto-refresh');
+    if (checkbox.checked) {
+        // Refresh every 5 seconds - only load newer logs
+        autoRefreshInterval = setInterval(() => {
+            if (logsWrapper && newestTimestamp) {
+                loadNewerLogs(true);
+            }
+        }, 5000);
+    } else {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+}
+
+async function loadOlderLogs() {
+    if (isLoadingOlder || !hasMoreOlder || !oldestTimestamp || !logsWrapper || !logsContent) {
+        return;
+    }
+    
+    isLoadingOlder = true;
+    const loadingTop = document.getElementById('loading-top');
+    if (loadingTop) loadingTop.style.display = 'block';
+    
+    // Save scroll position
+    const scrollHeight = logsWrapper.scrollHeight;
+    const scrollTop = logsWrapper.scrollTop;
+    
+    try {
+        const response = await fetch(`/admin/api/apps/${appId}/logs?lines=${currentLines}&since=${encodeURIComponent(oldestTimestamp)}&direction=older`);
+        const data = await response.json();
+        
+        if (data.success && data.logs) {
+            const newLogs = data.logs.trim();
+            if (newLogs) {
+                // Prepend older logs
+                const currentContent = logsContent.textContent;
+                const currentLinesArray = currentContent.split('\n');
+                const newLinesArray = newLogs.split('\n');
+                
+                // Remove potential duplicates (check first line)
+                const firstCurrentLine = currentLinesArray[0];
+                let linesToAdd = newLinesArray;
+                if (firstCurrentLine && newLinesArray.length > 0) {
+                    // Remove lines that match the first line of current content
+                    linesToAdd = newLinesArray.filter(line => {
+                        return line.trim() && line.trim() !== firstCurrentLine.trim();
+                    });
+                }
+                
+                if (linesToAdd.length > 0) {
+                    logsContent.textContent = linesToAdd.join('\n') + '\n' + currentContent;
+                    
+                    // Update oldest timestamp
+                    if (data.oldest_timestamp) {
+                        oldestTimestamp = data.oldest_timestamp;
+                    }
+                    
+                    // Check if there are more logs
+                    hasMoreOlder = data.has_more && newLinesArray.length >= currentLines;
+                    
+                    // Restore scroll position (adjust for new content)
+                    const newScrollHeight = logsWrapper.scrollHeight;
+                    const heightDiff = newScrollHeight - scrollHeight;
+                    logsWrapper.scrollTop = scrollTop + heightDiff;
+                } else {
+                    hasMoreOlder = false;
+                }
+            } else {
+                hasMoreOlder = false;
+            }
+        } else {
+            hasMoreOlder = false;
+            if (data.error) {
+                console.error('Error loading older logs:', data.error);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading older logs:', error);
+        hasMoreOlder = false;
+    } finally {
+        isLoadingOlder = false;
+        if (loadingTop) loadingTop.style.display = 'none';
+    }
+}
+
+async function loadNewerLogs(silent = false) {
+    if (isLoadingNewer || !hasMoreNewer || !newestTimestamp || !logsWrapper || !logsContent) {
+        return;
+    }
+    
+    isLoadingNewer = true;
+    const loadingBottom = document.getElementById('loading-bottom');
+    if (!silent && loadingBottom) {
+        loadingBottom.style.display = 'block';
+    }
+    
+    // Check if user is near bottom (within 100px) - if not, don't auto-scroll
+    const isNearBottom = logsWrapper.scrollHeight - logsWrapper.scrollTop - logsWrapper.clientHeight < 100;
+    const wasAtBottom = isNearBottom;
+    
+    try {
+        const response = await fetch(`/admin/api/apps/${appId}/logs?lines=${currentLines}&until=${encodeURIComponent(newestTimestamp)}&direction=newer`);
+        const data = await response.json();
+        
+        if (data.success && data.logs) {
+            const newLogs = data.logs.trim();
+            if (newLogs) {
+                // Append newer logs
+                const currentContent = logsContent.textContent;
+                const currentLinesArray = currentContent.split('\n');
+                const newLinesArray = newLogs.split('\n');
+                
+                // Remove potential duplicates (check last line)
+                const lastCurrentLine = currentLinesArray[currentLinesArray.length - 1];
+                let linesToAdd = newLinesArray;
+                if (lastCurrentLine && newLinesArray.length > 0) {
+                    // Remove lines that match the last line of current content
+                    linesToAdd = newLinesArray.filter(line => {
+                        return line.trim() && line.trim() !== lastCurrentLine.trim();
+                    });
+                }
+                
+                if (linesToAdd.length > 0) {
+                    logsContent.textContent = currentContent + '\n' + linesToAdd.join('\n');
+                    
+                    // Update newest timestamp
+                    if (data.newest_timestamp) {
+                        newestTimestamp = data.newest_timestamp;
+                    }
+                    
+                    // Check if there are more logs
+                    hasMoreNewer = data.has_more && newLinesArray.length >= currentLines;
+                    
+                    // Auto-scroll to bottom if user was at bottom or if silent refresh
+                    if (wasAtBottom || silent) {
+                        logsWrapper.scrollTop = logsWrapper.scrollHeight;
+                    }
+                } else {
+                    hasMoreNewer = false;
+                }
+            } else {
+                hasMoreNewer = false;
+            }
+        } else {
+            hasMoreNewer = false;
+            if (data.error && !silent) {
+                console.error('Error loading newer logs:', data.error);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading newer logs:', error);
+        hasMoreNewer = false;
+    } finally {
+        isLoadingNewer = false;
+        if (!silent && loadingBottom) {
+            loadingBottom.style.display = 'none';
+        }
+    }
+}
+
+// Scroll detection for dynamic loading
+if (logsWrapper) {
+    logsWrapper.addEventListener('scroll', () => {
+        const scrollTop = logsWrapper.scrollTop;
+        const scrollHeight = logsWrapper.scrollHeight;
+        const clientHeight = logsWrapper.clientHeight;
+        
+        // Load older logs when near top (within 200px)
+        if (scrollTop < 200 && hasMoreOlder && !isLoadingOlder) {
+            loadOlderLogs();
+        }
+        
+        // Load newer logs when near bottom (within 200px)
+        if (scrollHeight - scrollTop - clientHeight < 200 && hasMoreNewer && !isLoadingNewer) {
+            loadNewerLogs();
+        }
+    });
+}
+
+// Initialize - scroll to bottom on load
+document.addEventListener('DOMContentLoaded', () => {
+    if (logsWrapper && logsContent) {
+        // Start at bottom (newest logs)
+        logsWrapper.scrollTop = logsWrapper.scrollHeight;
+        
+        // Check if we're already at the top (no scrollbar) - try to load older logs
+        if (logsWrapper.scrollHeight <= logsWrapper.clientHeight && hasMoreOlder && oldestTimestamp) {
+            setTimeout(() => loadOlderLogs(), 500);
+        }
+    }
+});
+</script>
+{% endblock %}
+

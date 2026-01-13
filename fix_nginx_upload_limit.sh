@@ -53,3 +53,4 @@ echo "Done! The nginx upload limit has been updated to 20MB."
 echo "You can now upload image files up to 20MB in size."
 
 
+

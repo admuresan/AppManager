@@ -414,6 +414,60 @@ ENDSSH
 echo -e "${GREEN}✓ Service configured and started${NC}"
 echo ""
 
+# Configure sudo permissions for AppManager user
+echo -e "${YELLOW}[7.5/10] Configuring sudo permissions for log access...${NC}"
+$SSH_CMD ${SERVER_USER}@${SERVER_IP} << ENDSSH
+    # Create sudoers file for AppManager user
+    # This allows passwordless sudo for journalctl and systemctl commands needed by AppManager
+    SUDOERS_FILE="/etc/sudoers.d/appmanager-${SERVER_USER}"
+    
+    # Create sudoers configuration
+    cat > /tmp/appmanager_sudoers << EOFSUDOERS
+# Sudo permissions for AppManager user (${SERVER_USER})
+# Allows passwordless sudo for:
+# - journalctl: To read application logs
+# - systemctl restart: To restart application services
+
+${SERVER_USER} ALL=(ALL) NOPASSWD: /usr/bin/journalctl
+${SERVER_USER} ALL=(ALL) NOPASSWD: /bin/journalctl
+${SERVER_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl status *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /bin/systemctl status *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl show *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /bin/systemctl show *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl list-units *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /bin/systemctl list-units *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active *
+${SERVER_USER} ALL=(ALL) NOPASSWD: /bin/systemctl is-active *
+EOFSUDOERS
+    
+    # Validate sudoers file syntax before installing
+    if sudo visudo -c -f /tmp/appmanager_sudoers 2>/dev/null; then
+        # Install sudoers file
+        sudo cp /tmp/appmanager_sudoers "\$SUDOERS_FILE"
+        sudo chmod 0440 "\$SUDOERS_FILE"
+        sudo chown root:root "\$SUDOERS_FILE"
+        echo "✓ Sudo permissions configured successfully"
+        echo "  - Passwordless sudo for journalctl (log viewing)"
+        echo "  - Passwordless sudo for systemctl restart (service restart)"
+        echo "  - Passwordless sudo for systemctl status/show/list-units (service detection)"
+        
+        # Test that sudo works without password
+        if sudo -n journalctl --version > /dev/null 2>&1; then
+            echo "✓ Verified: journalctl sudo access works without password"
+        else
+            echo "⚠ Warning: Could not verify journalctl sudo access (may require password on first use)"
+        fi
+    else
+        echo "⚠ Warning: Sudoers file validation failed, skipping sudo configuration"
+        echo "  You may need to configure sudo permissions manually"
+        rm -f /tmp/appmanager_sudoers
+    fi
+ENDSSH
+echo -e "${GREEN}✓ Sudo permissions configured${NC}"
+echo ""
+
 # Configure SSL certificates and nginx
 echo -e "${YELLOW}[8/10] Configuring SSL certificates and nginx...${NC}"
 
