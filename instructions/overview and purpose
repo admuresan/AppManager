@@ -1,0 +1,12 @@
+this app is to be a guide and meta application acting as a gateway for other apps running n the sam machine
+
+the idea is that this app will run on a server taking in requests form external http and https  on standard ports, on that machine other apps will be runnig on internal ports 
+
+these apps will be managed via the app manager ( see app amanger file)
+
+when a user goes to the web site being served they see a welcome page with buttons that list the apps that are set up in the manager, one of the options here is always the manager
+
+when a user click on one of the apps they are redirtected to that app and interact with it as though it were listening to the main incoming ports
+
+note that other tabs on the sam machign or ther users on different machiens should be able to go ot the website this app hosts and lck on the same or different apps and get indiviualized experiences so if one user picks app1, everyoen else isn't locked into that app
+

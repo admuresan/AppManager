@@ -1,0 +1,7 @@
+{
+    "USER_OCID_PLACEHOLDER": "ocid1.user.oc1..aaaaaaaacrgfrwvgulhvxcvl4y7vmjf67rku6dtpbkfdzufzpsgnnpa3thvq",
+    "TENANCY_OCID_PLACEHOLDER": "ocid1.tenancy.oc1..aaaaaaaafptbeupadayy7lq4ja3fojoemy2bweql4zg3l7izg4a7x4dtjjla",
+    "REGION_PLACEHOLDER": "ca-toronto-1",
+    "COMPARTMENT_OCID_PLACEHOLDER": "ocid1.tenancy.oc1..aaaaaaaafptbeupadayy7lq4ja3fojoemy2bweql4zg3l7izg4a7x4dtjjla",
+    "VCN_OCID_PLACEHOLDER": "ocid1.vcn.oc1.ca-toronto-1.amaaaaaagvacjnyag5bvnw5qdrb5qwj7ul4ufrhunqsrgnhipoajlv7xdi4a"
+}

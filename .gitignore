@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+AMvenv/
+*.egg-info/
+dist/
+build/
+
+# Flask
+instance/
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Deployment
+# deploy.sh - Allow deploy script to be committed
+ssh/*.key
+ssh/*.pem
+*.key
+*.pem
+ssh/*
+oci_ssh/*.key
+oci_ssh/*.pem
+# Allow OCID_config.json to be committed (contains OCIDs which are not secrets)
+!oci_ssh/OCID_config.json

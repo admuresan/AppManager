@@ -1,0 +1,25 @@
+the app manager requires log in, by default the admin account is LastTerminal and the password is WhiteMage (this should be in a local file that is used during deploy but thta file should not be git backed)
+
+do not stro pasword as plaintext
+
+once logged in they see a nicely formated list of currenty set up apps, each row has a ... at the end and one of the options is edit
+
+when editing all the values can be changed and there is a save button that saves the new configurations
+
+configurations need to be saved on server and must survive restarts and code deploy
+configurations should not be git backed
+
+in additon there is a plus button to add a new row, the rows are laid out in table spacing but not an acutal table 
+each row has it's onw nice container 
+
+a row has the following attributes:
+- app name ( the display name to show when selectign the app from the main page)
+- app port (the internal port the app is being served on)
+- app logo (opional a picture to upload to put in front of the name on the button)
+
+another option on the ... menu is delete, this deletes the configuration
+
+another option on the ... menu is test, this pings the internal port and confirms that the app is indeed listening
+
+another option on the ... menu is restart, this restarts the app running on that port ( if this requires more config when creatign a new row do that and let me know)
+

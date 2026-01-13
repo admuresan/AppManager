@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome - AppManager{% endblock %}
+
+{% block content %}
+<!-- Manager Icon in Top Right -->
+<a href="{{ url_for('admin.dashboard') }}" class="manager-icon" title="{{ manager_app.name }}">
+    ⚙️
+</a>
+
+<div class="welcome-page">
+    <header class="welcome-header">
+        <div class="logo-container">
+            <img src="{{ url_for('welcome.media_file', filename='BlackGrid.png') }}" alt="BlackGrid" class="blackgrid-logo" style="background: transparent; background-color: transparent;">
+        </div>
+        <h1>Welcome to BlackGrid</h1>
+        <p>Select an application to get started</p>
+        <p class="info-note">Apps open directly on their configured ports</p>
+    </header>
+    
+    <div class="apps-grid">
+        <!-- Other Apps -->
+        {% for app in apps %}
+        <div class="app-card">
+            {# Use the select route which handles nginx configuration and port mapping correctly #}
+            <a href="{{ url_for('welcome.select_app', app_id=app.id) }}" class="app-link" target="_blank">
+                {% if app.logo %}
+                    <img src="{{ url_for('admin.uploaded_file', filename=app.logo) }}" alt="{{ app.name }}" class="app-logo">
+                {% else %}
+                    <div class="app-logo-placeholder">{{ app.name[0].upper() }}</div>
+                {% endif %}
+                <h3>{{ app.name }}</h3>
+            </a>
+        </div>
+        {% endfor %}
+        
+        {% if not apps %}
+        <div class="no-apps">
+            <p>No apps configured yet.</p>
+            <p><a href="{{ url_for('admin.dashboard') }}">Login to Admin</a> to add apps.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+

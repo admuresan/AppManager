@@ -1,0 +1,616 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - AppManager{% endblock %}
+
+{% block extra_head %}
+<style>
+    .logo-preview {
+        max-width: 50px;
+        max-height: 50px;
+        object-fit: contain;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Manager Icon in Top Right -->
+<a href="{{ url_for('welcome.index') }}" class="manager-icon" title="Back to Welcome">
+    🏠
+</a>
+
+<div class="admin-dashboard">
+    <header class="dashboard-header">
+        <h1>App Manager Dashboard</h1>
+        <div class="header-actions">
+            <a href="{{ url_for('welcome.index') }}" class="btn btn-secondary">← Back to Welcome</a>
+            <a href="{{ url_for('admin.logout') }}" class="btn btn-secondary">Logout</a>
+        </div>
+    </header>
+    
+    <!-- Ports Console -->
+    <div class="ports-console">
+        <div class="console-header">
+            <h2>Active Ports Console</h2>
+            <button class="btn btn-secondary" onclick="refreshPortsConsole()" style="font-size: 0.9em;">🔄 Refresh</button>
+        </div>
+        <div id="ports-console-content" class="console-content">
+            <p style="color: #808080; text-align: center; padding: 20px;">Loading active ports...</p>
+        </div>
+    </div>
+    
+    <div class="apps-list">
+        <div class="apps-list-header">
+            <h2>Configured Applications</h2>
+            <button class="btn btn-primary" onclick="showAddModal()">+ Add App</button>
+        </div>
+        
+        <div id="apps-container" class="apps-container">
+            {% for app in apps %}
+            <div class="app-row" data-app-id="{{ app.id }}">
+                <div class="app-row-content">
+                    <div class="app-info">
+                        {% if app.logo %}
+                            <img src="{{ url_for('admin.uploaded_file', filename=app.logo) }}" alt="{{ app.name }}" class="logo-preview">
+                        {% else %}
+                            <div class="logo-placeholder-small">{{ app.name[0].upper() }}</div>
+                        {% endif %}
+                        <div class="app-details">
+                            <h3>{{ app.name }}</h3>
+                            <p>Port: {{ app.port }} | Service: {{ app.get('service_name', 'N/A') }}</p>
+                        </div>
+                    </div>
+                    <div class="app-actions">
+                        <div class="dropdown">
+                            <button class="btn-icon" onclick="toggleDropdown('{{ app.id }}')">⋯</button>
+                            <div id="dropdown-{{ app.id }}" class="dropdown-menu">
+                                <a href="#" onclick="editApp('{{ app.id }}'); return false;">Edit</a>
+                                <a href="#" onclick="testApp('{{ app.id }}'); return false;">Test</a>
+                                <a href="#" onclick="fixSSL('{{ app.id }}'); return false;">Fix SSL</a>
+                                <a href="#" onclick="restartApp('{{ app.id }}'); return false;">Restart</a>
+                                <a href="#" onclick="deleteApp('{{ app.id }}'); return false;" class="danger">Delete</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            {% if not apps %}
+            <div class="no-apps">
+                <p>No apps configured. Click "Add App" to get started.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div id="app-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modal-title">Add Application</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="app-form" class="modal-form" enctype="multipart/form-data">
+            <input type="hidden" id="app-id" name="app_id">
+            
+            <div class="form-group">
+                <label for="app-name">App Name *</label>
+                <input type="text" id="app-name" name="name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="app-port">Port *</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="app-port" name="port" required min="1" max="65535" style="flex: 1;">
+                    <button type="button" class="btn btn-secondary" onclick="detectServiceName()" style="white-space: nowrap;" title="Auto-detect service name from port">🔍 Detect</button>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="app-service-name">Service Name (optional)</label>
+                <input type="text" id="app-service-name" name="service_name" placeholder="e.g., calculator.service">
+                <small>
+                    Systemd service name for restart functionality (Linux only). 
+                    Leave blank if not using systemd or running locally.
+                    <br>
+                    <a href="#" onclick="showServiceNameHelp(); return false;" style="color: #667eea;">How to find service name?</a>
+                </small>
+            </div>
+            
+            <div class="form-group">
+                <label for="app-logo">Logo (optional)</label>
+                <input type="file" id="app-logo" name="logo" accept="image/*">
+                <div id="logo-preview-container"></div>
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Test Results Modal -->
+<div id="test-results-modal" class="modal">
+    <div class="modal-content test-results-modal-content">
+        <div class="modal-header">
+            <h2>Test Results</h2>
+            <button class="modal-close" onclick="closeTestResultsModal()">&times;</button>
+        </div>
+        <div id="test-results-content" class="test-results-content">
+            <!-- Test results will be populated here -->
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeTestResultsModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Test Results Modal -->
+<div id="test-results-modal" class="modal">
+    <div class="modal-content test-results-modal-content">
+        <div class="modal-header">
+            <h2>Test Results</h2>
+            <button class="modal-close" onclick="closeTestResultsModal()">&times;</button>
+        </div>
+        <div id="test-results-content" class="test-results-content">
+            <!-- Test results will be populated here -->
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeTestResultsModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentEditingId = null;
+
+function showAddModal(port = null, serviceName = null) {
+    currentEditingId = null;
+    document.getElementById('modal-title').textContent = 'Add Application';
+    document.getElementById('app-form').reset();
+    document.getElementById('app-id').value = '';
+    document.getElementById('logo-preview-container').innerHTML = '';
+    
+    // Pre-fill port and service name if provided
+    if (port !== null) {
+        document.getElementById('app-port').value = port;
+    }
+    if (serviceName) {
+        document.getElementById('app-service-name').value = serviceName;
+    }
+    
+    document.getElementById('app-modal').style.display = 'block';
+}
+
+function addAppFromPort(port, serviceName) {
+    showAddModal(port, serviceName || '');
+}
+
+function editApp(appId) {
+    currentEditingId = appId;
+    document.getElementById('modal-title').textContent = 'Edit Application';
+    
+    // Fetch app data
+    fetch(`/admin/api/apps`)
+        .then(r => r.json())
+        .then(data => {
+            const app = data.apps.find(a => a.id === appId);
+            if (app) {
+                document.getElementById('app-id').value = app.id;
+                document.getElementById('app-name').value = app.name;
+                document.getElementById('app-port').value = app.port;
+                document.getElementById('app-service-name').value = app.service_name || '';
+                
+                if (app.logo) {
+                    document.getElementById('logo-preview-container').innerHTML = 
+                        `<img src="/admin/uploads/${app.logo}" class="logo-preview" style="margin-top: 10px;">`;
+                }
+                
+                document.getElementById('app-modal').style.display = 'block';
+            }
+        });
+}
+
+function closeModal() {
+    document.getElementById('app-modal').style.display = 'none';
+    currentEditingId = null;
+}
+
+function toggleDropdown(appId) {
+    const dropdown = document.getElementById(`dropdown-${appId}`);
+    const appRow = dropdown.closest('.app-row');
+    // Close all other dropdowns
+    document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu.id !== `dropdown-${appId}`) {
+            menu.style.display = 'none';
+            menu.closest('.app-row')?.classList.remove('dropdown-open');
+        }
+    });
+    if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+        appRow?.classList.remove('dropdown-open');
+    } else {
+        dropdown.style.display = 'block';
+        appRow?.classList.add('dropdown-open');
+    }
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown')) {
+        document.querySelectorAll('.dropdown-menu').forEach(menu => {
+            menu.style.display = 'none';
+            menu.closest('.app-row')?.classList.remove('dropdown-open');
+        });
+    }
+});
+
+// Alert banner management
+function showAlert(message, type = 'warning') {
+    // Remove existing alerts
+    const existingAlerts = document.querySelectorAll('.alert-banner');
+    existingAlerts.forEach(alert => alert.remove());
+    
+    // Create new alert
+    const alert = document.createElement('div');
+    alert.className = `alert-banner ${type}`;
+    alert.innerHTML = `
+        <span class="alert-icon">${type === 'error' ? '⚠️' : '⚠️'}</span>
+        <span class="alert-message">${message}</span>
+        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+    
+    // Insert at top of apps-list
+    const appsList = document.querySelector('.apps-list');
+    appsList.insertBefore(alert, appsList.firstChild);
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+        if (alert.parentElement) {
+            alert.remove();
+        }
+    }, 10000);
+}
+
+// Ports Console
+async function refreshPortsConsole() {
+    const content = document.getElementById('ports-console-content');
+    content.innerHTML = '<p style="color: #808080; text-align: center; padding: 20px;">Loading...</p>';
+    
+    try {
+        const response = await fetch('/admin/api/active-ports');
+        const result = await response.json();
+        
+        if (result.success && result.ports && result.ports.length > 0) {
+            let html = '<table><thead><tr><th>Port</th><th>Service Name</th><th>PID</th><th>Action</th></tr></thead><tbody>';
+            result.ports.forEach(item => {
+                const serviceName = item.service_name || '';
+                html += `<tr>
+                    <td class="port-number">${item.port}</td>
+                    <td class="${item.service_name ? 'service-name' : 'no-service'}">${item.service_name || '(no service)'}</td>
+                    <td class="pid-info">${item.pid || 'N/A'}</td>
+                    <td><button class="btn-add-port" data-port="${item.port}" data-service-name="${serviceName.replace(/"/g, '&quot;')}" title="Add as configured application">+</button></td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            content.innerHTML = html;
+            
+            // Attach event listeners to all add buttons
+            content.querySelectorAll('.btn-add-port').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const port = parseInt(this.getAttribute('data-port'));
+                    const serviceName = this.getAttribute('data-service-name') || '';
+                    addAppFromPort(port, serviceName);
+                });
+            });
+        } else {
+            content.innerHTML = '<p style="color: #808080; text-align: center; padding: 20px;">No active ports found or detection not available.</p>';
+        }
+    } catch (error) {
+        content.innerHTML = `<p style="color: #dc3545; text-align: center; padding: 20px;">Error loading ports: ${error.message}</p>`;
+    }
+}
+
+// Load ports console on page load
+document.addEventListener('DOMContentLoaded', () => {
+    refreshPortsConsole();
+});
+
+document.getElementById('app-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const appId = document.getElementById('app-id').value;
+    
+    try {
+        let response;
+        if (appId) {
+            // Update
+            const data = {
+                name: formData.get('name'),
+                port: parseInt(formData.get('port')),
+                service_name: formData.get('service_name') || null,
+                logo: formData.get('logo') ? null : document.querySelector('#logo-preview-container img')?.src.split('/static/')[1] || null
+            };
+            
+            if (formData.get('logo') && formData.get('logo').size > 0) {
+                // Has new logo file
+                const updateFormData = new FormData();
+                updateFormData.append('name', data.name);
+                updateFormData.append('port', data.port);
+                updateFormData.append('service_name', data.service_name || '');
+                updateFormData.append('logo', formData.get('logo'));
+                
+                response = await fetch(`/admin/api/apps/${appId}`, {
+                    method: 'PUT',
+                    body: updateFormData
+                });
+            } else {
+                response = await fetch(`/admin/api/apps/${appId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+            }
+        } else {
+            // Create
+            response = await fetch('/admin/api/apps', {
+                method: 'POST',
+                body: formData
+            });
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Refresh ports console
+            refreshPortsConsole();
+            location.reload();
+        } else {
+            // Show error banner instead of alert
+            const errorMsg = result.error || 'Unknown error';
+            showAlert(errorMsg, 'error');
+            
+            // If it's a port listening error, highlight the port field
+            if (result.is_listening === false) {
+                document.getElementById('app-port').style.borderColor = '#dc3545';
+                document.getElementById('app-port').focus();
+            }
+        }
+    } catch (error) {
+        showAlert('Error: ' + error.message, 'error');
+    }
+});
+
+function closeTestResultsModal() {
+    document.getElementById('test-results-modal').style.display = 'none';
+}
+
+async function testApp(appId) {
+    try {
+        // Show loading state
+        const modal = document.getElementById('test-results-modal');
+        const content = document.getElementById('test-results-content');
+        content.innerHTML = '<p style="text-align: center; padding: 40px; color: #b0b0b0;">Testing app connectivity...</p>';
+        modal.style.display = 'block';
+        
+        const response = await fetch(`/admin/api/apps/${appId}/test`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        // Build HTML content for test results
+        let html = '<div class="test-results">';
+        
+        // Socket listening test
+        html += '<div class="test-section">';
+        html += '<h3>Socket Test</h3>';
+        html += '<div class="test-result ' + (result.is_listening ? 'success' : 'error') + '">';
+        html += result.is_listening 
+            ? '<span class="test-icon">✓</span><span>Port ' + result.port + ' is listening</span>'
+            : '<span class="test-icon">✗</span><span>Port ' + result.port + ' is NOT listening</span>';
+        html += '</div>';
+        html += '</div>';
+        
+        // HTTP test
+        html += '<div class="test-section">';
+        html += '<h3>HTTP Test (Port ' + result.port + ')</h3>';
+        html += '<div class="test-result ' + (result.http.accessible ? 'success' : 'error') + '">';
+        if (result.http.accessible) {
+            const status = typeof result.http.status === 'number' ? 'HTTP ' + result.http.status : result.http.status;
+            html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+        } else {
+            html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.http.status + '</span>';
+        }
+        html += '</div>';
+        html += '<div class="test-url"><strong>URL:</strong> <code>' + result.http.url + '</code></div>';
+        html += '</div>';
+        
+        // HTTPS test
+        html += '<div class="test-section">';
+        html += '<h3>HTTPS Test (Port ' + result.https.port + ')</h3>';
+        html += '<div class="test-result ' + (result.https.accessible ? 'success' : 'error') + '">';
+        if (result.https.accessible) {
+            const status = typeof result.https.status === 'number' ? 'HTTP ' + result.https.status : result.https.status;
+            html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+            if (result.https.status === 'SSL_ERROR') {
+                html += '<div class="test-warning">⚠ SSL certificate issue detected (certificate not trusted)</div>';
+            }
+        } else {
+            html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.https.status + '</span>';
+        }
+        html += '</div>';
+        html += '<div class="test-url"><strong>URL:</strong> <code>' + result.https.url + '</code></div>';
+        html += '</div>';
+        
+        html += '</div>';
+        
+        content.innerHTML = html;
+    } catch (error) {
+        const content = document.getElementById('test-results-content');
+        content.innerHTML = '<div class="test-error"><p>Error testing app: ' + error.message + '</p></div>';
+    }
+}
+
+// Close modal when clicking outside
+document.getElementById('test-results-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeTestResultsModal();
+    }
+});
+
+async function fixSSL(appId) {
+    if (!confirm('This will recreate the SSL certificate and nginx configuration for this app.\n\nThis ensures HTTPS works properly with proper signatures.\n\nContinue?')) {
+        return;
+    }
+    
+    // Close dropdown
+    const dropdown = document.getElementById(`dropdown-${appId}`);
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.closest('.app-row')?.classList.remove('dropdown-open');
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/apps/${appId}/fix-ssl`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            let message = '✓ SSL fixed successfully!\n\n';
+            message += result.message || 'SSL certificate and nginx configuration updated.';
+            
+            if (result.certificate_info) {
+                message += `\n\nCertificate Type: ${result.certificate_info.type}`;
+                if (result.certificate_info.trusted) {
+                    message += '\n✓ Using trusted certificate (browsers will trust it)';
+                } else {
+                    message += '\n⚠ Certificate is not trusted';
+                    message += '\n\nPlease set up Let\'s Encrypt for trusted certificates.';
+                }
+            }
+            
+            alert(message);
+        } else {
+            alert('✗ Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error fixing SSL: ' + error.message);
+    }
+}
+
+async function restartApp(appId) {
+    if (!confirm('Are you sure you want to restart this app?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/apps/${appId}/restart`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('✓ ' + (result.message || 'App restarted successfully'));
+        } else {
+            alert('✗ Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error restarting app: ' + error.message);
+    }
+}
+
+async function deleteApp(appId) {
+    if (!confirm('Are you sure you want to delete this app? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/apps/${appId}`, {
+            method: 'DELETE'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error deleting app: ' + error.message);
+    }
+}
+
+// Logo preview
+document.getElementById('app-logo').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            document.getElementById('logo-preview-container').innerHTML = 
+                `<img src="${e.target.result}" class="logo-preview" style="margin-top: 10px;">`;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+function showServiceNameHelp() {
+    alert('Service Name Help:\n\n' +
+          'The service name is the systemd service name for your app on Linux servers.\n\n' +
+          'To find it:\n' +
+          '1. Click the "🔍 Detect" button next to the Port field to auto-detect\n' +
+          '2. Or on your server, run: sudo systemctl list-units --type=service\n' +
+          '3. Look for your app (e.g., calculator.service, quizia.service)\n' +
+          '4. Or check: ls /etc/systemd/system/*.service\n\n' +
+          'Examples:\n' +
+          '- calculator.service (for Calculator app)\n' +
+          '- quizia.service (for Quizia app)\n' +
+          '- deltabooks.service (for DeltaBooks app)\n\n' +
+          'Note: Leave blank if:\n' +
+          '- Running locally (not on Linux server)\n' +
+          '- Not using systemd\n' +
+          '- Don\'t need restart functionality\n\n' +
+          'See SERVICE_NAME_GUIDE.md for more details.');
+}
+
+async function detectServiceName() {
+    const port = document.getElementById('app-port').value;
+    if (!port) {
+        alert('Please enter a port number first');
+        return;
+    }
+    
+    const detectBtn = event.target;
+    const originalText = detectBtn.textContent;
+    detectBtn.disabled = true;
+    detectBtn.textContent = 'Detecting...';
+    
+    try {
+        const response = await fetch(`/admin/api/detect-service/${port}`);
+        const result = await response.json();
+        
+        if (result.success && result.service_name) {
+            document.getElementById('app-service-name').value = result.service_name;
+            alert(`✓ Detected service: ${result.service_name}`);
+        } else {
+            alert('Could not detect service name for this port.\n\n' +
+                  'This might mean:\n' +
+                  '- No service is running on this port\n' +
+                  '- Not running on Linux with systemd\n' +
+                  '- Service detection is not available\n\n' +
+                  'You can still manually enter the service name.');
+        }
+    } catch (error) {
+        alert('Error detecting service: ' + error.message);
+    } finally {
+        detectBtn.disabled = false;
+        detectBtn.textContent = originalText;
+    }
+}
+</script>
+{% endblock %}
+
