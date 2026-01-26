@@ -384,7 +384,7 @@ async function loadOlderLogs() {
     const scrollTop = logsWrapper.scrollTop;
     
     try {
-        const response = await fetch(`/admin/api/apps/${appId}/logs?lines=${currentLines}&since=${encodeURIComponent(oldestTimestamp)}&direction=older`);
+        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/logs?lines=${currentLines}&since=${encodeURIComponent(oldestTimestamp)}&direction=older`);
         const data = await response.json();
         
         if (data.success && data.logs) {
@@ -457,7 +457,7 @@ async function loadNewerLogs(silent = false) {
     const wasAtBottom = isNearBottom;
     
     try {
-        const response = await fetch(`/admin/api/apps/${appId}/logs?lines=${currentLines}&until=${encodeURIComponent(newestTimestamp)}&direction=newer`);
+        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/logs?lines=${currentLines}&until=${encodeURIComponent(newestTimestamp)}&direction=newer`);
         const data = await response.json();
         
         if (data.success && data.logs) {

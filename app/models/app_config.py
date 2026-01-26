@@ -97,6 +97,10 @@ class AppConfig:
         """Create a new app configuration"""
         apps = cls.get_all()
         
+        # Prevent apps from being named "blackgrid" (reserved for AppManager)
+        if cls._slugify(name) == 'blackgrid':
+            raise ValueError("'blackgrid' is a reserved name and cannot be used for app names.")
+        
         # Check for duplicate slugs
         new_slug = cls._slugify(name)
         for app in apps:
@@ -128,6 +132,10 @@ class AppConfig:
         for app in apps:
             if app.get('id') == app_id:
                 if name is not None:
+                    # Prevent apps from being named "blackgrid" (reserved for AppManager)
+                    if cls._slugify(name) == 'blackgrid':
+                        raise ValueError("'blackgrid' is a reserved name and cannot be used for app names.")
+                    
                     # Check for duplicate slugs (excluding current app)
                     new_slug = cls._slugify(name)
                     for other_app in apps:

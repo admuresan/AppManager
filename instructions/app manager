@@ -10,7 +10,7 @@ configurations need to be saved on server and must survive restarts and code dep
 configurations should not be git backed
 
 in additon there is a plus button to add a new row, the rows are laid out in table spacing but not an acutal table 
-each row has it's onw nice container 
+each row has it's own nice container 
 
 a row has the following attributes:
 - app name ( the display name to show when selectign the app from the main page)

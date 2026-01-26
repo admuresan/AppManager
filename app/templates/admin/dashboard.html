@@ -221,17 +221,16 @@
         width: 500px;
         height: auto;
         min-width: 500px;
-        min-height: 700px;
+        min-height: 500px;
         max-width: 500px;
-        /* Height auto allows stats grid to fit below chart */
     }
     
-    /* Fixed size for network chart (full width) - auto height to fit stats */
+    /* Fixed size for network chart (full width) */
     #resource-content-area > .resource-chart-container[style*="grid-column"] {
         width: 100%;
         min-width: 1020px; /* 500px + 500px + 20px gap */
         height: auto;
-        min-height: 600px;
+        min-height: 400px;
     }
     
     /* Override for overall traffic stats - should only fit content */
@@ -426,6 +425,8 @@
         <h1>App Manager Dashboard</h1>
         <div class="header-actions">
             <a href="{{ url_for('welcome.index') }}" class="btn btn-secondary">← Back to Welcome</a>
+            <button onclick="showConfigModal(); return false;" class="btn btn-secondary">⚙️ Config</button>
+            <button onclick="restartAppManager(); return false;" class="btn btn-secondary">Restart App Manager</button>
             <a href="{{ url_for('admin.logout') }}" class="btn btn-secondary">Logout</a>
         </div>
     </header>
@@ -544,7 +545,6 @@
                             <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(0 GB / 0 GB)</div>
                         </div>
                     </div>
-                    <div class="resource-stats-grid" id="memory-stats"></div>
                 </div>
                 
                 <!-- Disk Chart -->
@@ -559,7 +559,6 @@
                             <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(0 GB / 0 GB)</div>
                         </div>
                     </div>
-                    <div class="resource-stats-grid" id="disk-stats"></div>
                 </div>
                 
                 <!-- Network Chart -->
@@ -569,7 +568,6 @@
                         <span class="resource-chart-value" id="network-value">Loading...</span>
                     </div>
                     <canvas id="network-chart" class="resource-chart-canvas"></canvas>
-                    <div class="resource-stats-grid" id="network-stats"></div>
                 </div>
             </div>
         </div>
@@ -736,6 +734,40 @@
     </div>
 </div>
 
+<!-- Config Modal -->
+<div id="config-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Configuration</h2>
+            <button type="button" class="close-btn" onclick="closeConfigModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 30px;">
+            <div class="form-group">
+                <label for="shutdown-timeout">Auto-Shutdown Timeout (minutes)</label>
+                <input type="number" id="shutdown-timeout" min="1" max="1440" value="15" style="width: 100px;">
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Apps will automatically shut down after this many minutes of inactivity (default: 15 minutes)
+                </small>
+            </div>
+            
+            <div class="form-group" style="margin-top: 20px;">
+                <label>Environment Variables</label>
+                <div id="env-vars-container" style="margin-top: 10px;">
+                    <!-- Environment variables will be loaded here -->
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addEnvVar()" style="margin-top: 10px;">+ Add Variable</button>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Environment variables for AppManager (requires restart to take effect)
+                </small>
+            </div>
+        </div>
+        <div class="modal-actions" style="padding: 0 30px 30px 30px;">
+            <button type="button" class="btn btn-secondary" onclick="closeConfigModal()" style="flex: 1; min-width: 0;">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveConfig()" style="flex: 1; min-width: 0;">Save</button>
+        </div>
+    </div>
+</div>
+
 <!-- Test Results Modal -->
 <div id="test-results-modal" class="modal">
     <div class="modal-content test-results-modal-content">
@@ -756,7 +788,7 @@ let currentEditingId = null;
 
 async function refreshOptFolders() {
     try {
-        const response = await fetch('/admin/api/opt-folders');
+        const response = await fetch('/blackgrid/admin/api/opt-folders');
         const result = await response.json();
         
         const select = document.getElementById('app-folder-path');
@@ -817,7 +849,7 @@ function editApp(appId) {
     // Load /opt folders first
     refreshOptFolders().then(() => {
         // Fetch app data
-        fetch(`/admin/api/apps`)
+        fetch(`/blackgrid/admin/api/apps`)
             .then(r => r.json())
             .then(data => {
                 const app = data.apps.find(a => a.id === appId);
@@ -830,7 +862,7 @@ function editApp(appId) {
                     
                     if (app.logo) {
                         document.getElementById('logo-preview-container').innerHTML = 
-                            `<img src="/admin/uploads/${app.logo}" class="logo-preview" style="margin-top: 10px;">`;
+                            `<img src="/blackgrid/admin/uploads/${app.logo}" class="logo-preview" style="margin-top: 10px;">`;
                     }
                     
                     document.getElementById('app-modal').style.display = 'block';
@@ -842,6 +874,159 @@ function editApp(appId) {
 function closeModal() {
     document.getElementById('app-modal').style.display = 'none';
     currentEditingId = null;
+}
+
+// Config Modal Functions
+async function showConfigModal() {
+    const modal = document.getElementById('config-modal');
+    modal.style.display = 'block';
+    
+    // Load current timeout
+    try {
+        const response = await fetch('/blackgrid/admin/api/config/shutdown-timeout');
+        const result = await response.json();
+        if (result.success) {
+            document.getElementById('shutdown-timeout').value = result.timeout_minutes;
+        }
+    } catch (error) {
+        console.error('Error loading shutdown timeout:', error);
+    }
+    
+    // Load environment variables
+    try {
+        const response = await fetch('/blackgrid/admin/api/config/env-vars');
+        const result = await response.json();
+        if (result.success) {
+            renderEnvVars(result.env_vars || {});
+        }
+    } catch (error) {
+        console.error('Error loading env vars:', error);
+        renderEnvVars({});
+    }
+}
+
+function closeConfigModal() {
+    document.getElementById('config-modal').style.display = 'none';
+}
+
+function renderEnvVars(envVars) {
+    const container = document.getElementById('env-vars-container');
+    container.innerHTML = '';
+    
+    const entries = Object.entries(envVars);
+    if (entries.length === 0) {
+        container.innerHTML = '<p style="color: #666; font-style: italic;">No environment variables configured</p>';
+        return;
+    }
+    
+    entries.forEach(([key, value], index) => {
+        const div = document.createElement('div');
+        div.style.marginBottom = '10px';
+        div.style.display = 'flex';
+        div.style.gap = '10px';
+        div.style.alignItems = 'center';
+        div.innerHTML = `
+            <input type="text" class="env-var-key" placeholder="Variable name" value="${escapeHtml(key)}" style="flex: 1; padding: 8px;">
+            <input type="text" class="env-var-value" placeholder="Variable value" value="${escapeHtml(value)}" style="flex: 1; padding: 8px;">
+            <button type="button" class="btn btn-secondary" onclick="removeEnvVar(this)" style="padding: 8px 12px;">Remove</button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function addEnvVar() {
+    const container = document.getElementById('env-vars-container');
+    const div = document.createElement('div');
+    div.style.marginBottom = '10px';
+    div.style.display = 'flex';
+    div.style.gap = '10px';
+    div.style.alignItems = 'center';
+    div.innerHTML = `
+        <input type="text" class="env-var-key" placeholder="Variable name" style="flex: 1; padding: 8px;">
+        <input type="text" class="env-var-value" placeholder="Variable value" style="flex: 1; padding: 8px;">
+        <button type="button" class="btn btn-secondary" onclick="removeEnvVar(this)" style="padding: 8px 12px;">Remove</button>
+    `;
+    container.appendChild(div);
+}
+
+function removeEnvVar(button) {
+    button.parentElement.remove();
+    // If no env vars left, show message
+    const container = document.getElementById('env-vars-container');
+    if (container.children.length === 0) {
+        container.innerHTML = '<p style="color: #666; font-style: italic;">No environment variables configured</p>';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+async function saveConfig() {
+    try {
+        // Save shutdown timeout
+        const timeout = parseInt(document.getElementById('shutdown-timeout').value);
+        if (isNaN(timeout) || timeout < 1 || timeout > 1440) {
+            alert('Shutdown timeout must be between 1 and 1440 minutes');
+            return;
+        }
+        
+        const timeoutResponse = await fetch('/blackgrid/admin/api/config/shutdown-timeout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ timeout_minutes: timeout })
+        });
+        
+        const timeoutResult = await timeoutResponse.json();
+        if (!timeoutResult.success) {
+            alert('Error saving shutdown timeout: ' + (timeoutResult.error || 'Unknown error'));
+            return;
+        }
+        
+        // Save environment variables
+        const container = document.getElementById('env-vars-container');
+        const envVars = {};
+        const rows = container.querySelectorAll('div[style*="display: flex"]');
+        
+        rows.forEach(row => {
+            const keyInput = row.querySelector('.env-var-key');
+            const valueInput = row.querySelector('.env-var-value');
+            if (keyInput && keyInput.value.trim()) {
+                envVars[keyInput.value.trim()] = valueInput ? valueInput.value : '';
+            }
+        });
+        
+        const envResponse = await fetch('/blackgrid/admin/api/config/env-vars', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ env_vars: envVars })
+        });
+        
+        const envResult = await envResponse.json();
+        if (!envResult.success) {
+            alert('Error saving environment variables: ' + (envResult.error || 'Unknown error'));
+            return;
+        }
+        
+        alert('✓ Configuration saved successfully!');
+        closeConfigModal();
+    } catch (error) {
+        alert('Error saving configuration: ' + error.message);
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const configModal = document.getElementById('config-modal');
+    if (event.target === configModal) {
+        closeConfigModal();
+    }
 }
 
 function toggleDropdown(appId) {
@@ -914,7 +1099,7 @@ async function refreshPortsConsole() {
     content.innerHTML = '<p style="color: #808080; text-align: center; padding: 20px;">Loading...</p>';
     
     try {
-        const response = await fetch('/admin/api/active-ports');
+        const response = await fetch('/blackgrid/admin/api/active-ports');
         const result = await response.json();
         
         if (result.success && result.ports && result.ports.length > 0) {
@@ -1147,7 +1332,7 @@ async function handleTabCompletion(input) {
     
     // Get autocomplete suggestions
     try {
-        const response = await fetch('/admin/api/terminal/autocomplete', {
+        const response = await fetch('/blackgrid/admin/api/terminal/autocomplete', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1312,7 +1497,7 @@ async function executeCommand(command) {
     terminalInput.disabled = true;
     
     try {
-        const response = await fetch('/admin/api/terminal/execute', {
+        const response = await fetch('/blackgrid/admin/api/terminal/execute', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1400,12 +1585,12 @@ document.getElementById('app-form').addEventListener('submit', async (e) => {
                 updateFormData.append('folder_path', data.folder_path || '');
                 updateFormData.append('logo', formData.get('logo'));
                 
-                response = await fetch(`/admin/api/apps/${appId}`, {
+                response = await fetch(`/blackgrid/admin/api/apps/${appId}`, {
                     method: 'PUT',
                     body: updateFormData
                 });
             } else {
-                response = await fetch(`/admin/api/apps/${appId}`, {
+                response = await fetch(`/blackgrid/admin/api/apps/${appId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(data)
@@ -1413,7 +1598,7 @@ document.getElementById('app-form').addEventListener('submit', async (e) => {
             }
         } else {
             // Create
-            response = await fetch('/admin/api/apps', {
+            response = await fetch('/blackgrid/admin/api/apps', {
                 method: 'POST',
                 body: formData
             });
@@ -1453,7 +1638,7 @@ async function testApp(appId) {
         content.innerHTML = '<p style="text-align: center; padding: 40px; color: #b0b0b0;">Testing app connectivity...</p>';
         modal.style.display = 'block';
         
-        const response = await fetch(`/admin/api/apps/${appId}/test`, {
+        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/test`, {
             method: 'POST'
         });
         const result = await response.json();
@@ -1631,7 +1816,7 @@ async function fixSSL(appId) {
     }
     
     try {
-        const response = await fetch(`/admin/api/apps/${appId}/fix-ssl`, {
+        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/fix-ssl`, {
             method: 'POST'
         });
         const result = await response.json();
@@ -1665,9 +1850,20 @@ async function restartApp(appId) {
     }
     
     try {
-        const response = await fetch(`/admin/api/apps/${appId}/restart`, {
-            method: 'POST'
+        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/restart`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
+        
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            throw new Error(`Expected JSON but received ${contentType}. Response: ${text.substring(0, 100)}`);
+        }
+        
         const result = await response.json();
         
         if (result.success) {
@@ -1680,11 +1876,56 @@ async function restartApp(appId) {
     }
 }
 
+async function restartAppManager() {
+    if (!confirm('Are you sure you want to restart App Manager? This will temporarily disconnect you from the dashboard.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/blackgrid/admin/api/restart-appmanager`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            throw new Error(`Expected JSON but received ${contentType}. Response: ${text.substring(0, 100)}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('✓ ' + (result.message || 'App Manager restarted successfully. You will be disconnected momentarily.'));
+            // Redirect to welcome page after a short delay
+            setTimeout(() => {
+                window.location.href = '/blackgrid/';
+            }, 2000);
+        } else {
+            alert('✗ Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        // If we get a network error, the service might have restarted before response was sent
+        // In this case, assume it worked and redirect anyway
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            alert('✓ Restart initiated. The service is restarting. You will be redirected...');
+            setTimeout(() => {
+                window.location.href = '/blackgrid/';
+            }, 2000);
+        } else {
+            alert('Error restarting App Manager: ' + error.message);
+        }
+    }
+}
+
 async function toggleServeApp(appId, checked) {
     const checkbox = document.querySelector(`input.serve-app-checkbox[data-app-id="${appId}"]`);
     
     try {
-        const response = await fetch(`/admin/api/apps/${appId}/toggle-serve`, {
+        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/toggle-serve`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1722,7 +1963,7 @@ async function deleteApp(appId) {
     }
     
     try {
-        const response = await fetch(`/admin/api/apps/${appId}`, {
+        const response = await fetch(`/blackgrid/admin/api/apps/${appId}`, {
             method: 'DELETE'
         });
         const result = await response.json();
@@ -1782,7 +2023,7 @@ async function detectServiceName() {
     detectBtn.textContent = 'Detecting...';
     
     try {
-        const response = await fetch(`/admin/api/detect-service/${port}`);
+        const response = await fetch(`/blackgrid/admin/api/detect-service/${port}`);
         const result = await response.json();
         
         if (result.success && result.service_name) {
@@ -1850,7 +2091,7 @@ async function refreshResourceStats() {
     lastResourceStatsCall = now;
     
     try {
-        const response = await fetch('/admin/api/resources');
+        const response = await fetch('/blackgrid/admin/api/resources');
         
         // Check if response is OK before parsing JSON
         if (!response.ok) {
@@ -1997,67 +2238,7 @@ function updateMemoryChart(memory, apps, appmanager, breakdown) {
     data.push(freePercent);
     colors.push('#252526'); // Dark background color
     
-    // Update stats grid
-    let statsHtml = `
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Total:</span>
-            <span class="resource-stat-value">${parseFloat(memory.total_gb).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Used:</span>
-            <span class="resource-stat-value">${parseFloat(memory.used_gb).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Available:</span>
-            <span class="resource-stat-value">${parseFloat(memory.available_gb).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Free:</span>
-            <span class="resource-stat-value">${parseFloat(memory.free_gb).toFixed(2)} GB</span>
-        </div>
-    `;
-    
-    // Add breakdown details
-    apps.forEach(app => {
-        if (app.memory_percent > 0.1) {
-            statsHtml += `
-                <div class="resource-stat-item">
-                    <span class="resource-stat-label">${app.app_name}:</span>
-                    <span class="resource-stat-value">${parseFloat(app.memory_gb).toFixed(2)} GB (${app.memory_percent.toFixed(2)}%)</span>
-                </div>
-            `;
-        }
-    });
-    
-    if (appmanager && appmanager.memory_percent > 0.1) {
-        statsHtml += `
-            <div class="resource-stat-item">
-                <span class="resource-stat-label">AppManager:</span>
-                <span class="resource-stat-value">${parseFloat(appmanager.memory_gb).toFixed(2)} GB (${appmanager.memory_percent.toFixed(2)}%)</span>
-            </div>
-        `;
-    }
-    
-    if (breakdown) {
-        if (breakdown.system && breakdown.system.memory_percent > 0.1) {
-            statsHtml += `
-                <div class="resource-stat-item">
-                    <span class="resource-stat-label">System:</span>
-                    <span class="resource-stat-value">${parseFloat(breakdown.system.memory_gb).toFixed(2)} GB (${breakdown.system.memory_percent.toFixed(2)}%)</span>
-                </div>
-            `;
-        }
-        if (breakdown.other && breakdown.other.memory_percent > 0.1) {
-            statsHtml += `
-                <div class="resource-stat-item">
-                    <span class="resource-stat-label">Other:</span>
-                    <span class="resource-stat-value">${parseFloat(breakdown.other.memory_gb).toFixed(2)} GB (${breakdown.other.memory_percent.toFixed(2)}%)</span>
-                </div>
-            `;
-        }
-    }
-    
-    document.getElementById('memory-stats').innerHTML = statsHtml;
+    // Stats grid removed - no longer displaying stats below charts
     
     if (memoryChart) {
         memoryChart.destroy();
@@ -2225,57 +2406,7 @@ function updateDiskChart(disk, apps, appmanager, breakdown) {
     data.push(freePercent);
     colors.push('#252526'); // Dark background color
     
-    // Update stats grid
-    let statsHtml = `
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Total:</span>
-            <span class="resource-stat-value">${parseFloat(disk.total_gb).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Used:</span>
-            <span class="resource-stat-value">${parseFloat(disk.used_gb).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Free:</span>
-            <span class="resource-stat-value">${parseFloat(disk.free_gb).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Usage:</span>
-            <span class="resource-stat-value">${usedPercent.toFixed(2)}%</span>
-        </div>
-    `;
-    
-    // Add breakdown details
-    apps.forEach(app => {
-        if (app.disk_percent > 0.01) {
-            statsHtml += `
-                <div class="resource-stat-item">
-                    <span class="resource-stat-label">${app.app_name}:</span>
-                    <span class="resource-stat-value">${parseFloat(app.disk_gb).toFixed(2)} GB (${app.disk_percent.toFixed(2)}%)</span>
-                </div>
-            `;
-        }
-    });
-    
-    if (appmanager && appmanager.disk_percent > 0.01) {
-        statsHtml += `
-            <div class="resource-stat-item">
-                <span class="resource-stat-label">AppManager:</span>
-                <span class="resource-stat-value">${parseFloat(appmanager.disk_gb).toFixed(2)} GB (${appmanager.disk_percent.toFixed(2)}%)</span>
-            </div>
-        `;
-    }
-    
-    if (breakdown && breakdown.other && breakdown.other.disk_percent > 0.01) {
-        statsHtml += `
-            <div class="resource-stat-item">
-                <span class="resource-stat-label">Other:</span>
-                <span class="resource-stat-value">${parseFloat(breakdown.other.disk_gb).toFixed(2)} GB (${breakdown.other.disk_percent.toFixed(2)}%)</span>
-            </div>
-        `;
-    }
-    
-    document.getElementById('disk-stats').innerHTML = statsHtml;
+    // Stats grid removed - no longer displaying stats below charts
     
     if (diskChart) {
         diskChart.destroy();
@@ -2391,42 +2522,7 @@ function updateNetworkChart(network) {
     
     document.getElementById('network-value').textContent = `Sent: ${parseFloat(sentGB).toFixed(2)} GB | Received: ${parseFloat(recvGB).toFixed(2)} GB`;
     
-    // Update stats grid
-    const statsHtml = `
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Bytes Sent:</span>
-            <span class="resource-stat-value">${parseFloat(sentGB).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Bytes Received:</span>
-            <span class="resource-stat-value">${parseFloat(recvGB).toFixed(2)} GB</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Packets Sent:</span>
-            <span class="resource-stat-value">${network.packets_sent.toLocaleString()}</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Packets Received:</span>
-            <span class="resource-stat-value">${network.packets_recv.toLocaleString()}</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Errors In:</span>
-            <span class="resource-stat-value">${network.errors_in.toLocaleString()}</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Errors Out:</span>
-            <span class="resource-stat-value">${network.errors_out.toLocaleString()}</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Drops In:</span>
-            <span class="resource-stat-value">${network.drops_in.toLocaleString()}</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Drops Out:</span>
-            <span class="resource-stat-value">${network.drops_out.toLocaleString()}</span>
-        </div>
-    `;
-    document.getElementById('network-stats').innerHTML = statsHtml;
+    // Stats grid removed - no longer displaying stats below charts
     
     if (networkChart) {
         networkChart.destroy();
@@ -2532,7 +2628,7 @@ async function refreshTrafficStats() {
         const includeLocalCheckbox = document.getElementById('include-local-checkbox');
         const includeLocal = includeLocalCheckbox ? includeLocalCheckbox.checked : true;
         
-        const response = await fetch(`/admin/api/traffic?days=30&include_local=${includeLocal}`);
+        const response = await fetch(`/blackgrid/admin/api/traffic?days=30&include_local=${includeLocal}`);
         const result = await response.json();
         
         if (result.success && result.stats) {
@@ -3149,7 +3245,7 @@ function updateAppsBreakdownChart(appsData) {
 // Admin Login Tracking
 async function refreshAdminLogins() {
     try {
-        const response = await fetch('/admin/api/admin-logins');
+        const response = await fetch('/blackgrid/admin/api/admin-logins');
         const result = await response.json();
         
         if (result.success && result.logins) {

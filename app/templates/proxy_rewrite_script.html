@@ -1,0 +1,451 @@
+<script>
+(function() {
+    // Prevent double-injection if script is already loaded
+    if (window.__APP_MANAGER_REWRITE_LOADED) {
+        return;
+    }
+    window.__APP_MANAGER_REWRITE_LOADED = true;
+    
+    const APP_SLUG = '/{{ app_slug }}';
+    const APP_SLUG_NORMALIZED = APP_SLUG.startsWith('/') ? APP_SLUG : '/' + APP_SLUG;
+    const APP_SLUG_COOKIE_PREFIX = '{{ app_slug }}_';  // Prefix for cookie names to isolate per app
+    
+    // Configuration: Marker to identify URLs that have been processed by our rewrite function
+    // This marker is added to processed URLs and stripped by the proxy when forwarding to localhost
+    // Change this value if you need to use a different marker (e.g., if conflicts occur)
+    const PROCESSED_MARKER = '__bg_rw=1';  // BlackGrid Rewrite marker
+    
+    /**
+     * Check if a URL contains the processed marker
+     * @param {string} url - URL to check
+     * @returns {boolean} - True if URL has been processed
+     */
+    function hasProcessedMarker(url) {
+        if (!url || typeof url !== 'string') return false;
+        // Check if URL contains our special marker in query string
+        // Match __bg_rw=1 or __bg_rw=1& or &__bg_rw=1 or ?__bg_rw=1
+        return url.includes('__bg_rw=1');
+    }
+    
+    /**
+     * Add the processed marker to a URL
+     * @param {string} url - URL to mark
+     * @returns {string} - URL with marker added
+     */
+    function addProcessedMarker(url) {
+        if (!url || typeof url !== 'string') return url;
+        if (hasProcessedMarker(url)) return url; // Already marked
+        
+        // Add marker to query string
+        const separator = url.includes('?') ? '&' : '?';
+        return url + separator + PROCESSED_MARKER;
+    }
+    
+    function rewriteUrl(url) {
+        if (!url || typeof url !== 'string') return url;
+        
+        // If URL has our processed marker, it's already been processed - return as-is (keep marker)
+        // The marker will be stripped by the proxy when forwarding to localhost
+        if (hasProcessedMarker(url)) {
+            return url; // Return with marker still attached to prevent re-processing
+        }
+        
+        // Skip special URLs that should never be rewritten
+        if (url.startsWith('data:') || url.startsWith('javascript:') || 
+            url.startsWith('mailto:') || url.startsWith('tel:') || url.startsWith('#')) {
+            return url;
+        }
+        
+        // Skip protocol-relative URLs (external CDNs)
+        if (url.startsWith('//')) return url;
+        
+        // Skip absolute URLs to external domains
+        if (url.match(/^https?:\/\/[^\/]+/) && !url.includes('localhost')) {
+            return url;
+        }
+        
+        // COMPUTING LOGIC: If we're in this function, the URL came from client-side JavaScript
+        // (fetch, XHR, location.href, setAttribute). ProxyFix does NOT process
+        // client-side JavaScript URLs - it only processes server-side url_for().
+        // However, we need to ensure we don't rewrite URLs that have already been rewritten.
+        // We use a special marker to track processed URLs instead of checking path content.
+        
+        // If URL is already absolute with our domain, it's already been processed - don't rewrite
+        // This handles cases where JavaScript reads a URL from DOM (which ProxyFix already processed)
+        if (url.match(/^https?:\/\/[^\/]+/) && url.includes(window.location.hostname)) {
+            return url;
+        }
+        
+        let rewritten;
+        
+        // Handle relative URLs (starting with /)
+        if (url.startsWith('/')) {
+            // Add prefix - this is a client-side JavaScript URL that needs prefixing
+            rewritten = APP_SLUG_NORMALIZED + url;
+        } else {
+            // Handle relative URLs without leading slash (e.g., "api/calculate")
+            rewritten = APP_SLUG_NORMALIZED + '/' + url;
+        }
+        
+        // TEMP DEV LOG: Log URL rewrite for debugging - DELETE LATER
+        const finalRewritten = addProcessedMarker(rewritten);
+        console.log('[TEMP DEV LOG - DELETE LATER] URL Rewrite:', {
+            original: url,
+            rewrittenWithMarker: finalRewritten,
+            appSlug: APP_SLUG_NORMALIZED
+        });
+        
+        // Add processed marker to indicate this URL has been rewritten
+        return finalRewritten;
+    }
+    
+    // Override XMLHttpRequest for dynamic API calls
+    // COMPUTING LOGIC: Only override XHR.open ONCE, and always use the TRUE native XHR.open
+    if (!window.__APP_MANAGER_ORIGINAL_XHR_OPEN) {
+        // Capture the TRUE native XHR.open BEFORE any overrides
+        window.__APP_MANAGER_ORIGINAL_XHR_OPEN = XMLHttpRequest.prototype.open;
+    }
+    // Only override if we haven't already created the override function
+    if (!window.__APP_MANAGER_REWRITE_XHR_OPEN) {
+        window.__APP_MANAGER_REWRITE_XHR_OPEN = function(method, url, ...rest) {
+            // COMPUTING LOGIC: If we're in this function, the URL came from app's JavaScript code
+            // (not from our own rewriting, not from server-side url_for). Therefore, it needs prefix.
+            if (typeof url === 'string') {
+                const originalUrl = url;
+                // Rewrite URL (adds marker if needed)
+                url = rewriteUrl(url);
+                // TEMP DEV LOG: Log XHR rewrite - DELETE LATER
+                if (url !== originalUrl) {
+                    console.log('[TEMP DEV LOG - DELETE LATER] XHR rewrite triggered:', {
+                        method: 'XMLHttpRequest.open',
+                        httpMethod: method,
+                        original: originalUrl,
+                        final: url
+                    });
+                }
+                // Keep marker - it will be stripped by proxy when forwarding to localhost
+            }
+            // Always use the TRUE original native XHR.open
+            return window.__APP_MANAGER_ORIGINAL_XHR_OPEN.call(this, method, url, ...rest);
+        };
+    }
+    // Only assign if XHR.open is not already our override
+    // This prevents reassignment if the script runs multiple times
+    if (XMLHttpRequest.prototype.open !== window.__APP_MANAGER_REWRITE_XHR_OPEN) {
+        XMLHttpRequest.prototype.open = window.__APP_MANAGER_REWRITE_XHR_OPEN;
+    }
+    
+    // Override location assignments for dynamic navigation
+    // COMPUTING LOGIC: Only override location.href ONCE
+    if (!window.__APP_MANAGER_LOCATION_HREF_OVERRIDDEN) {
+    const locationProto = Object.getPrototypeOf(window.location);
+    const locationHrefDesc = Object.getOwnPropertyDescriptor(locationProto, 'href') ||
+                            Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+    if (locationHrefDesc && locationHrefDesc.set) {
+            // Store the original setter
+            window.__APP_MANAGER_ORIGINAL_LOCATION_HREF_SET = locationHrefDesc.set;
+        Object.defineProperty(window.location, 'href', {
+            set: function(value) {
+                // COMPUTING LOGIC: If we're in this function, the URL came from app's JavaScript code
+                // (not from our own rewriting, not from server-side url_for). Therefore, it needs prefix.
+                const originalUrl = value;
+                // Rewrite URL (adds marker if needed)
+                const rewritten = rewriteUrl(value);
+                // TEMP DEV LOG: Log location.href rewrite - DELETE LATER
+                if (rewritten !== originalUrl) {
+                    console.log('[TEMP DEV LOG - DELETE LATER] location.href rewrite triggered:', {
+                        method: 'location.href',
+                        original: originalUrl,
+                        final: rewritten
+                    });
+                }
+                // Keep marker - it will be stripped by proxy when forwarding to localhost
+                window.__APP_MANAGER_ORIGINAL_LOCATION_HREF_SET.call(window.location, rewritten);
+            },
+            get: locationHrefDesc.get,
+            configurable: true,
+            enumerable: true
+        });
+            window.__APP_MANAGER_LOCATION_HREF_OVERRIDDEN = true;
+        }
+    }
+    
+    // Override setAttribute for dynamically created elements
+    // COMPUTING LOGIC: Only override setAttribute ONCE, and always use the TRUE native setAttribute
+    if (!window.__APP_MANAGER_ORIGINAL_SET_ATTRIBUTE) {
+        // Capture the TRUE native setAttribute BEFORE any overrides
+        window.__APP_MANAGER_ORIGINAL_SET_ATTRIBUTE = Element.prototype.setAttribute;
+    }
+    // Only override if we haven't already created the override function
+    if (!window.__APP_MANAGER_REWRITE_SET_ATTRIBUTE) {
+        window.__APP_MANAGER_REWRITE_SET_ATTRIBUTE = function(name, value) {
+            // COMPUTING LOGIC: If we're in this function, the URL came from app's JavaScript code
+            // (not from our own rewriting, not from server-side url_for). Therefore, it needs prefix.
+            if ((name === 'src' || name === 'href' || name === 'action') && typeof value === 'string') {
+                const originalValue = value;
+                // Rewrite URL (adds marker if needed)
+                value = rewriteUrl(value);
+                // TEMP DEV LOG: Log setAttribute rewrite - DELETE LATER
+                if (value !== originalValue) {
+                    console.log('[TEMP DEV LOG - DELETE LATER] setAttribute rewrite triggered:', {
+                        method: 'setAttribute',
+                        attribute: name,
+                        original: originalValue,
+                        final: value
+                    });
+                }
+                // Keep marker - it will be stripped by proxy when forwarding to localhost
+            }
+            // Always use the TRUE original native setAttribute
+            return window.__APP_MANAGER_ORIGINAL_SET_ATTRIBUTE.call(this, name, value);
+        };
+    }
+    // Only assign if setAttribute is not already our override
+    // This prevents reassignment if the script runs multiple times
+    if (Element.prototype.setAttribute !== window.__APP_MANAGER_REWRITE_SET_ATTRIBUTE) {
+        Element.prototype.setAttribute = window.__APP_MANAGER_REWRITE_SET_ATTRIBUTE;
+    }
+    
+    // ============================================================================
+    // COOKIE ISOLATION: Each app should have its own isolated cookies
+    // ============================================================================
+    
+    /**
+     * Parse a cookie string into an object
+     * @param {string} cookieString - Cookie string (e.g., "name=value; name2=value2")
+     * @returns {Object} - Object with cookie names as keys
+     */
+    function parseCookies(cookieString) {
+        const cookies = {};
+        if (!cookieString) return cookies;
+        
+        cookieString.split(';').forEach(cookie => {
+            const parts = cookie.trim().split('=');
+            if (parts.length >= 2) {
+                const name = parts[0].trim();
+                const value = parts.slice(1).join('='); // Handle values with = in them
+                cookies[name] = value;
+            }
+        });
+        return cookies;
+    }
+    
+    /**
+     * Serialize cookies object to cookie string
+     * @param {Object} cookies - Object with cookie names as keys
+     * @returns {string} - Cookie string
+     */
+    function serializeCookies(cookies) {
+        return Object.entries(cookies)
+            .map(([name, value]) => `${name}=${value}`)
+            .join('; ');
+    }
+    
+    /**
+     * Check if a cookie name belongs to this app
+     * @param {string} cookieName - Cookie name to check
+     * @returns {boolean} - True if cookie belongs to this app
+     */
+    function isAppCookie(cookieName) {
+        return cookieName.startsWith(APP_SLUG_COOKIE_PREFIX);
+    }
+    
+    /**
+     * Add app prefix to cookie name
+     * @param {string} cookieName - Original cookie name
+     * @returns {string} - Prefixed cookie name
+     */
+    function prefixCookieName(cookieName) {
+        if (isAppCookie(cookieName)) {
+            // Already prefixed, return as-is
+            return cookieName;
+        }
+        return APP_SLUG_COOKIE_PREFIX + cookieName;
+    }
+    
+    /**
+     * Remove app prefix from cookie name
+     * @param {string} cookieName - Prefixed cookie name
+     * @returns {string} - Original cookie name (without prefix)
+     */
+    function unprefixCookieName(cookieName) {
+        if (cookieName.startsWith(APP_SLUG_COOKIE_PREFIX)) {
+            return cookieName.substring(APP_SLUG_COOKIE_PREFIX.length);
+        }
+        return cookieName;
+    }
+    
+    /**
+     * Parse a cookie assignment string (e.g., "name=value; path=/; domain=example.com")
+     * @param {string} cookieString - Cookie assignment string
+     * @returns {Object} - Parsed cookie with name, value, and attributes
+     */
+    function parseCookieAssignment(cookieString) {
+        const parts = cookieString.split(';').map(p => p.trim());
+        const nameValue = parts[0].split('=');
+        const name = nameValue[0].trim();
+        const value = nameValue.slice(1).join('='); // Handle values with = in them
+        
+        const cookie = { name, value };
+        
+        // Parse attributes (path, domain, expires, max-age, secure, httponly, samesite)
+        for (let i = 1; i < parts.length; i++) {
+            const part = parts[i].toLowerCase();
+            if (part.startsWith('path=')) {
+                cookie.path = part.substring(5);
+            } else if (part.startsWith('domain=')) {
+                cookie.domain = part.substring(7);
+            } else if (part.startsWith('expires=')) {
+                cookie.expires = part.substring(8);
+            } else if (part.startsWith('max-age=')) {
+                cookie.maxAge = part.substring(8);
+            } else if (part === 'secure') {
+                cookie.secure = true;
+            } else if (part === 'httponly') {
+                cookie.httpOnly = true;
+            } else if (part.startsWith('samesite=')) {
+                cookie.sameSite = part.substring(9);
+            }
+        }
+        
+        return cookie;
+    }
+    
+    /**
+     * Serialize cookie object to cookie assignment string
+     * @param {Object} cookie - Cookie object with name, value, and attributes
+     * @returns {string} - Cookie assignment string
+     */
+    function serializeCookieAssignment(cookie) {
+        let result = `${cookie.name}=${cookie.value}`;
+        if (cookie.path) result += `; path=${cookie.path}`;
+        if (cookie.domain) result += `; domain=${cookie.domain}`;
+        if (cookie.expires) result += `; expires=${cookie.expires}`;
+        if (cookie.maxAge) result += `; max-age=${cookie.maxAge}`;
+        if (cookie.secure) result += '; secure';
+        if (cookie.httpOnly) result += '; httponly';
+        if (cookie.sameSite) result += `; samesite=${cookie.sameSite}`;
+        return result;
+    }
+    
+    // Override document.cookie getter and setter
+    // Only override once per app
+    if (!window.__APP_MANAGER_COOKIE_OVERRIDDEN) {
+        const cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie') ||
+                                 Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
+        
+        if (cookieDescriptor) {
+            // Store original getter and setter
+            const originalCookieGetter = cookieDescriptor.get;
+            const originalCookieSetter = cookieDescriptor.set;
+            
+            // Override document.cookie
+            Object.defineProperty(document, 'cookie', {
+                get: function() {
+                    // Get all cookies
+                    const allCookies = originalCookieGetter.call(document);
+                    const cookies = parseCookies(allCookies);
+                    
+                    // Filter to only this app's cookies and remove prefix
+                    const appCookies = {};
+                    for (const [name, value] of Object.entries(cookies)) {
+                        if (isAppCookie(name)) {
+                            const unprefixedName = unprefixCookieName(name);
+                            appCookies[unprefixedName] = value;
+                        }
+                    }
+                    
+                    // Return serialized cookies without prefix (app sees its cookies as if they weren't prefixed)
+                    return serializeCookies(appCookies);
+                },
+                set: function(cookieString) {
+                    // Parse the cookie assignment
+                    const cookie = parseCookieAssignment(cookieString);
+                    
+                    // Prefix the cookie name
+                    cookie.name = prefixCookieName(cookie.name);
+                    
+                    // Serialize and set the prefixed cookie
+                    const prefixedCookieString = serializeCookieAssignment(cookie);
+                    
+                    // Set the cookie with prefix
+                    originalCookieSetter.call(document, prefixedCookieString);
+                    
+                    // Return true to indicate success (cookie setter returns undefined, but we can't change that)
+                    return true;
+                },
+                configurable: true,
+                enumerable: true
+            });
+            
+            window.__APP_MANAGER_COOKIE_OVERRIDDEN = true;
+        }
+    }
+    
+    // ============================================================================
+    // HEARTBEAT: Keep app alive when browser tab is open
+    // ============================================================================
+    
+    // Send heartbeat every 30 seconds to keep app alive
+    let heartbeatInterval = null;
+    
+    function sendHeartbeat() {
+        try {
+            // Use fetch to send heartbeat
+            fetch(`${APP_SLUG_NORMALIZED}/__heartbeat__`, {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-cache'
+            }).catch(err => {
+                // Silently fail - heartbeat is best effort
+                console.debug('Heartbeat failed:', err);
+            });
+        } catch (e) {
+            // Silently fail
+            console.debug('Heartbeat error:', e);
+        }
+    }
+    
+    // Start heartbeat when page loads
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            // Send initial heartbeat immediately
+            sendHeartbeat();
+            // Then send every 30 seconds
+            heartbeatInterval = setInterval(sendHeartbeat, 30000);
+        });
+    } else {
+        // DOM already loaded
+        sendHeartbeat();
+        heartbeatInterval = setInterval(sendHeartbeat, 30000);
+    }
+    
+    // Stop heartbeat when page is hidden (tab not active)
+    // But keep it running if tab is just in background (user might come back)
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            // Page is hidden - could be minimized or tab switched
+            // We'll keep heartbeat running but at a slower rate (every 2 minutes)
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+            }
+            heartbeatInterval = setInterval(sendHeartbeat, 120000); // 2 minutes
+        } else {
+            // Page is visible again - resume normal heartbeat
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+            }
+            sendHeartbeat(); // Send immediately
+            heartbeatInterval = setInterval(sendHeartbeat, 30000); // Every 30 seconds
+        }
+    });
+    
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+        }
+    });
+})();
+</script>
+

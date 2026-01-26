@@ -381,7 +381,7 @@ Environment="PORT=${APP_PORT}"
 Environment="FLASK_ENV=production"
 Environment="SERVER_ADDRESS=${SERVER_IP}"
 Environment="SERVER_DOMAIN=blackgrid.ddns.net"
-ExecStart=${DEPLOY_DIR}/${VENV_NAME}/bin/python ${DEPLOY_DIR}/app.py
+ExecStart=${DEPLOY_DIR}/${VENV_NAME}/bin/gunicorn --config ${DEPLOY_DIR}/gunicorn_config.py app:app
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -853,14 +853,8 @@ echo ""
 echo -e "${YELLOW}Testing HTTPS via ${SERVER_DOMAIN}...${NC}"
 HTTPS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 --insecure https://${SERVER_DOMAIN}/ 2>/dev/null || echo "000")
 
-if [ "$HTTPS_STATUS" = "200" ]; then
-    echo -e "${GREEN}✓ HTTPS is accessible via ${SERVER_DOMAIN} (status: $HTTPS_STATUS)${NC}"
-    HTTPS_WORKING=true
-    HTTPS_CONTENT=$(curl -s --max-time 10 --insecure https://${SERVER_DOMAIN}/ 2>/dev/null | head -c 100 || echo "")
-    if echo "$HTTPS_CONTENT" | grep -q -i "appmanager\|welcome\|html"; then
-        echo -e "${GREEN}✓ Website content is being served correctly${NC}"
-    fi
-elif [ "$HTTPS_STATUS" = "000" ]; then
+# Accept 2xx and 3xx status codes as valid (200 OK, 301/302 redirects, etc.)
+if [ "$HTTPS_STATUS" = "000" ]; then
     echo -e "${RED}✗ HTTPS connection via ${SERVER_DOMAIN} failed (timeout or connection refused)${NC}"
     echo "  This may indicate:"
     echo "    - Nginx is not running"
@@ -868,6 +862,17 @@ elif [ "$HTTPS_STATUS" = "000" ]; then
     echo "    - Firewall blocking port 443"
     echo "    - DNS not resolving to server IP"
     echo "    - Service is still starting up"
+elif [ "$HTTPS_STATUS" -ge 200 ] && [ "$HTTPS_STATUS" -lt 400 ] 2>/dev/null; then
+    echo -e "${GREEN}✓ HTTPS is accessible via ${SERVER_DOMAIN} (status: $HTTPS_STATUS)${NC}"
+    HTTPS_WORKING=true
+    if [ "$HTTPS_STATUS" = "200" ]; then
+        HTTPS_CONTENT=$(curl -s --max-time 10 --insecure https://${SERVER_DOMAIN}/ 2>/dev/null | head -c 100 || echo "")
+        if echo "$HTTPS_CONTENT" | grep -q -i "appmanager\|welcome\|html"; then
+            echo -e "${GREEN}✓ Website content is being served correctly${NC}"
+        fi
+    elif [ "$HTTPS_STATUS" -ge 300 ] && [ "$HTTPS_STATUS" -lt 400 ]; then
+        echo "  (Redirect response - this is normal for applications with routing)"
+    fi
 else
     echo -e "${YELLOW}⚠ HTTPS via ${SERVER_DOMAIN} returned status: $HTTPS_STATUS${NC}"
     echo "  (This may indicate an issue with the application or configuration)"

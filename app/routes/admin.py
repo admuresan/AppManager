@@ -8,11 +8,13 @@ from werkzeug.exceptions import RequestEntityTooLarge
 import os
 import platform
 import subprocess
+import json
 from pathlib import Path
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
+import time
 
 # Disable SSL warnings for self-signed certificates
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -21,8 +23,9 @@ from app.models.user import User
 from app.models.app_config import AppConfig
 from app.utils.app_manager import test_app_port, restart_app_service, detect_service_name_by_port, get_active_ports_and_services, configure_firewall_port, check_port_status, get_app_logs
 from app.utils.ssl_manager import setup_ssl_for_app_port, setup_letsencrypt_certificate, regenerate_main_certificate, get_certificate_status_for_all_apps, _check_file_exists
+from app.utils.app_usage_tracker import get_tracker
 
-bp = Blueprint('admin', __name__, url_prefix='/admin')
+bp = Blueprint('admin', __name__, url_prefix='/blackgrid/admin')
 
 @bp.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
@@ -788,17 +791,61 @@ def fix_app_ssl(app_id):
 @login_required
 def restart_app(app_id):
     """Restart an app service"""
-    app_config = AppConfig.get_by_id(app_id)
-    if not app_config:
-        return jsonify({'error': 'App not found'}), 404
-    
-    service_name = app_config.get('service_name', f"app-{app_config['port']}.service")
-    success, message = restart_app_service(service_name)
-    
-    if success:
-        return jsonify({'success': True, 'message': message})
-    else:
-        return jsonify({'error': message}), 500
+    try:
+        app_config = AppConfig.get_by_id(app_id)
+        if not app_config:
+            return jsonify({'success': False, 'error': 'App not found'}), 404
+        
+        service_name = app_config.get('service_name', f"app-{app_config['port']}.service")
+        success, message = restart_app_service(service_name)
+        
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'error': message}), 500
+    except Exception as e:
+        current_app.logger.error(f"Error restarting app {app_id}: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error restarting app: {str(e)}'}), 500
+
+@bp.route('/api/restart-appmanager', methods=['POST'])
+@login_required
+def restart_appmanager():
+    """Restart the AppManager service"""
+    try:
+        # Send response first before restarting (so client gets it before service stops)
+        # Use a subprocess that runs independently and survives process termination
+        # We'll use systemd-run or nohup to ensure the restart command executes even if this process dies
+        
+        # Create a command that delays then restarts (gives time for HTTP response to be sent)
+        restart_command = 'sleep 1 && sudo systemctl restart appmanager.service'
+        
+        # Try systemd-run first (most reliable on systemd systems)
+        # This creates a transient unit that runs independently of the Flask process
+        try:
+            subprocess.Popen(
+                ['sudo', 'systemd-run', '--unit=appmanager-restart', 'sh', '-c', restart_command],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True  # Detach from parent process
+            )
+        except (FileNotFoundError, OSError):
+            # Fallback: use nohup with a shell command
+            # This works even if systemd-run is not available
+            subprocess.Popen(
+                ['nohup', 'sh', '-c', restart_command],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,  # Detach from parent process
+                preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # Create new process group (Unix only)
+            )
+        
+        return jsonify({
+            'success': True, 
+            'message': 'App Manager restart initiated. You will be disconnected momentarily.'
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error initiating AppManager restart: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error initiating restart: {str(e)}'}), 500
 
 @bp.route('/api/ssl/setup-letsencrypt', methods=['POST'])
 @login_required
@@ -1987,11 +2034,143 @@ def get_resource_stats():
             'error': str(e)
         }), 500
 
+@bp.route('/api/config/shutdown-timeout', methods=['GET'])
+@login_required
+def get_shutdown_timeout():
+    """Get the auto-shutdown timeout in minutes"""
+    try:
+        tracker = get_tracker(current_app.instance_path)
+        timeout = tracker.get_shutdown_timeout_minutes()
+        return jsonify({
+            'success': True,
+            'timeout_minutes': timeout
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error getting shutdown timeout: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/api/config/shutdown-timeout', methods=['POST'])
+@login_required
+def set_shutdown_timeout():
+    """Set the auto-shutdown timeout in minutes"""
+    try:
+        data = request.get_json()
+        timeout = data.get('timeout_minutes')
+        
+        if timeout is None:
+            return jsonify({
+                'success': False,
+                'error': 'timeout_minutes is required'
+            }), 400
+        
+        try:
+            timeout = int(timeout)
+            if timeout < 1 or timeout > 1440:  # 1 minute to 24 hours
+                return jsonify({
+                    'success': False,
+                    'error': 'timeout_minutes must be between 1 and 1440 (24 hours)'
+                }), 400
+        except (ValueError, TypeError):
+            return jsonify({
+                'success': False,
+                'error': 'timeout_minutes must be a number'
+            }), 400
+        
+        tracker = get_tracker(current_app.instance_path)
+        tracker.set_shutdown_timeout_minutes(timeout)
+        
+        return jsonify({
+            'success': True,
+            'timeout_minutes': timeout,
+            'message': f'Auto-shutdown timeout set to {timeout} minutes'
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error setting shutdown timeout: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/api/config/env-vars', methods=['GET'])
+@login_required
+def get_env_vars():
+    """Get environment variables configuration"""
+    try:
+        # Load from manager_config.json
+        config_path = Path(current_app.instance_path) / 'manager_config.json'
+        env_vars = {}
+        
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    env_vars = config.get('env_vars', {})
+            except Exception as e:
+                current_app.logger.warning(f"Error loading env vars: {e}")
+        
+        return jsonify({
+            'success': True,
+            'env_vars': env_vars
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error getting env vars: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/api/config/env-vars', methods=['POST'])
+@login_required
+def set_env_vars():
+    """Set environment variables configuration"""
+    try:
+        data = request.get_json()
+        env_vars = data.get('env_vars', {})
+        
+        if not isinstance(env_vars, dict):
+            return jsonify({
+                'success': False,
+                'error': 'env_vars must be an object'
+            }), 400
+        
+        # Load existing config
+        config_path = Path(current_app.instance_path) / 'manager_config.json'
+        config = {}
+        
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+            except Exception as e:
+                current_app.logger.warning(f"Error loading config: {e}")
+        
+        # Update env vars
+        config['env_vars'] = env_vars
+        
+        # Save config
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        return jsonify({
+            'success': True,
+            'env_vars': env_vars,
+            'message': 'Environment variables updated successfully'
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error setting env vars: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @bp.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     """Serve uploaded files (public access for logos)"""
     instance_path = Path(current_app.instance_path)
-    # Route is /admin/uploads/<filename>, so filename should be relative to instance/uploads/
+    # Route is /blackgrid/admin/uploads/<filename>, so filename should be relative to instance/uploads/
     # If filename is 'logos/file.png', we need to serve 'instance/uploads/logos/file.png'
     # If filename already includes 'uploads/', strip it (for backward compatibility)
     if filename.startswith('uploads/'):

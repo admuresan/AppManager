@@ -80,6 +80,50 @@ def check_port_status(port):
     
     return result
 
+def start_app_service(service_name):
+    """Start a systemd service"""
+    try:
+        # Try to start the service using systemctl
+        result = subprocess.run(
+            ['sudo', 'systemctl', 'start', service_name],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            return True, f"Service {service_name} started successfully"
+        else:
+            return False, f"Failed to start service: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return False, "Service start timed out"
+    except FileNotFoundError:
+        return False, "systemctl not available"
+    except Exception as e:
+        return False, f"Error starting service: {str(e)}"
+
+def stop_app_service(service_name):
+    """Stop a systemd service"""
+    try:
+        # Try to stop the service using systemctl
+        result = subprocess.run(
+            ['sudo', 'systemctl', 'stop', service_name],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            return True, f"Service {service_name} stopped successfully"
+        else:
+            return False, f"Failed to stop service: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return False, "Service stop timed out"
+    except FileNotFoundError:
+        return False, "systemctl not available"
+    except Exception as e:
+        return False, f"Error stopping service: {str(e)}"
+
 def restart_app_service(service_name):
     """Restart a systemd service"""
     try:

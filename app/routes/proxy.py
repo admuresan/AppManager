@@ -1,10 +1,20 @@
 """
 Reverse proxy routes for forwarding requests to internal apps
+
+This proxy implementation is designed to work with applications using ProxyFix middleware
+(e.g., Flask/Werkzeug). It sets all required X-Forwarded-* headers so that proxied apps
+can generate correct URLs based on the public-facing domain and protocol.
+
+Note: WebSocket support is limited. The requests library handles HTTP upgrade requests,
+but full bidirectional WebSocket connections may require additional implementation.
+For most use cases, the header passthrough should be sufficient for WebSocket upgrades.
 """
-from flask import Blueprint, request, Response, session, redirect, url_for, current_app
+from flask import Blueprint, request, Response, current_app, render_template_string, jsonify
 import requests
-from urllib.parse import urljoin
+import os
 import re
+import time
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from urllib3.exceptions import ResponseError, MaxRetryError
@@ -14,22 +24,26 @@ import traceback
 
 bp = Blueprint('proxy', __name__)
 
+# Special prefix for AppManager routes - should never be proxied
+MANAGER_PREFIX = 'blackgrid'
+
 # Configure logging for proxy route
 logger = logging.getLogger(__name__)
+
+# Check if we're in production (reduce debug logging for performance)
+IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('FLASK_DEBUG') == '0'
 
 # Create a session with connection pooling for better performance
 _session = requests.Session()
 
 # Configure retry strategy
-# Don't retry on 500 errors - these are application errors that won't be fixed by retrying
-# Only retry on connection/network errors (502, 503, 504)
 retry_strategy = Retry(
     total=1,
     backoff_factor=0.1,
-    status_forcelist=[502, 503, 504],  # Removed 500 - don't retry application errors
+    status_forcelist=[502, 503, 504],
 )
 
-# Mount adapter with connection pooling
+# Mount adapter with connection pooling and increased timeouts for WebSocket/long-polling
 adapter = HTTPAdapter(
     pool_connections=10,
     pool_maxsize=20,
@@ -38,156 +52,338 @@ adapter = HTTPAdapter(
 _session.mount("http://", adapter)
 _session.mount("https://", adapter)
 
-# Helper function to create URL rewriting patterns for a specific app slug
-# These patterns rewrite URLs in the HTML/CSS/JS to add the app slug prefix
-# so that browser requests go through the proxy
-# The internal app sees requests as if they're at root (e.g., /login)
-# But browser sees /appname/login and proxy forwards to internal app
-def make_patterns_for_app(app_slug):
-    """Create URL rewriting patterns for a specific app"""
-    escaped_slug = re.escape(app_slug)
-    
-    # HTML/CSS patterns - rewrite href, src, action, and CSS url() references
-    # Match absolute paths starting with / but NOT already prefixed with /{app_slug}/
-    # Also avoid matching // (protocol-relative URLs) or /{app_slug}/ (already rewritten)
-    html_css_patterns = [
-        # href="/path" -> href="/{app_slug}/path" (but not href="/{app_slug}/path" or href="//example.com")
-        (re.compile(rf'(href=["\'])(/)(?!{escaped_slug}/)(?!/)'), rf'\1/{app_slug}\2'),
-        # src="/path" -> src="/{app_slug}/path"
-        (re.compile(rf'(src=["\'])(/)(?!{escaped_slug}/)(?!/)'), rf'\1/{app_slug}\2'),
-        # action="/path" -> action="/{app_slug}/path"
-        (re.compile(rf'(action=["\'])(/)(?!{escaped_slug}/)(?!/)'), rf'\1/{app_slug}\2'),
-        # url('/path') or url("/path") in CSS -> url('/{app_slug}/path')
-        (re.compile(rf'(url\(["\']?)(/)(?!{escaped_slug}/)(?!/)'), rf'\1/{app_slug}\2'),
-        # @import url('/path') -> @import url('/{app_slug}/path')
-        (re.compile(rf'(@import\s+(?:url\()?["\']?)(/)(?!{escaped_slug}/)(?!/)'), rf'\1/{app_slug}\2'),
-    ]
-    
-    # JavaScript patterns - rewrite fetch, XMLHttpRequest, and other API calls
-    js_patterns = [
-        # fetch('/api/...') or fetch("/api/...") -> fetch('/{app_slug}/api/...')
-        (re.compile(rf"(fetch\(['\"])(/)(?!{escaped_slug}/)(?!/)"), rf'\1/{app_slug}\2'),
-        # XMLHttpRequest.open('POST', '/api/...') -> XMLHttpRequest.open('POST', '/{app_slug}/api/...')
-        (re.compile(rf"(\.open\([^,]+,\s*['\"])(/)(?!{escaped_slug}/)(?!/)"), rf'\1/{app_slug}\2'),
-        # axios.get('/api/...') -> axios.get('/{app_slug}/api/...')
-        (re.compile(rf"(axios\.(?:get|post|put|delete|patch)\(['\"])(/)(?!{escaped_slug}/)(?!/)"), rf'\1/{app_slug}\2'),
-        # $.ajax({ url: '/api/...' }) -> $.ajax({ url: '/{app_slug}/api/...' })
-        (re.compile(rf"(url\s*:\s*['\"])(/)(?!{escaped_slug}/)(?!/)"), rf'\1/{app_slug}\2'),
-        # $.get('/api/...') -> $.get('/{app_slug}/api/...')
-        (re.compile(rf"(\$\.(?:get|post|ajax)\(['\"])(/)(?!{escaped_slug}/)(?!/)"), rf'\1/{app_slug}\2'),
-        # window.location = '/...' -> window.location = '/{app_slug}/...'
-        (re.compile(rf"((?:window\.)?location(?:\.href)?\s*=\s*['\"])(/)(?!{escaped_slug}/)(?!/)"), rf'\1/{app_slug}\2'),
-    ]
-    
-    return html_css_patterns, js_patterns
 
-def parse_cookie_header(cookie_header):
-    """Parse Cookie header value into a dict of name=value pairs"""
-    cookies = {}
-    if not cookie_header:
-        return cookies
-    
-    # Split by semicolon and parse each cookie
-    for cookie_part in cookie_header.split(';'):
-        cookie_part = cookie_part.strip()
-        if '=' in cookie_part:
-            name, value = cookie_part.split('=', 1)
-            cookies[name.strip()] = value.strip()
-    
-    return cookies
+def get_manager_domain():
+    """Get the manager domain name from config"""
+    try:
+        from flask import current_app
+        if current_app and hasattr(current_app, 'config'):
+            domain = current_app.config.get('SERVER_DOMAIN', 'blackgrid.ddns.net')
+            if domain:
+                return domain
+    except:
+        pass
+    return 'blackgrid.ddns.net'
 
-def format_cookie_header(cookies):
-    """Format a dict of cookies into a Cookie header value"""
-    return '; '.join(f'{name}={value}' for name, value in cookies.items())
 
-def isolate_cookies_for_app(cookie_header, app_slug):
+def _url_has_app_prefix(url_path, app_slug):
     """
-    Filter and rewrite cookies for a specific app.
-    Only cookies prefixed with {app_slug}_ are forwarded, and the prefix is removed.
-    Returns the rewritten Cookie header value or None if no cookies match.
-    """
-    if not cookie_header:
-        return None
+    Check if a URL path already has the app prefix by parsing the path structure.
+    This is more robust than string matching as it actually parses the URL.
     
-    cookies = parse_cookie_header(cookie_header)
-    app_cookies = {}
+    Args:
+        url_path: URL path (e.g., '/quizia/static/css/style.css' or '/static/css/style.css')
+        app_slug: App slug to check for (e.g., 'quizia')
+    
+    Returns:
+        True if the first path segment matches app_slug, False otherwise
+    """
+    if not url_path or not url_path.startswith('/'):
+        return False
+    
+    # Split path into segments, removing empty strings
+    path_segments = [seg for seg in url_path.split('/') if seg]
+    
+    # Check if first segment matches app_slug
+    if path_segments and path_segments[0] == app_slug:
+        return True
+    
+    return False
+
+
+def _prefix_cookie_name(cookie_name, app_slug):
+    """
+    Add app prefix to cookie name for isolation.
+    
+    Args:
+        cookie_name: Original cookie name
+        app_slug: App slug to use as prefix
+    
+    Returns:
+        Prefixed cookie name (e.g., 'investment-calculator_myCookie')
+    """
     prefix = f'{app_slug}_'
-    
-    for name, value in cookies.items():
-        # Only forward cookies that belong to this app (prefixed with app_slug_)
-        if name.startswith(prefix):
-            # Remove the prefix before sending to the app
-            app_cookie_name = name[len(prefix):]
-            app_cookies[app_cookie_name] = value
-    
-    if app_cookies:
-        return format_cookie_header(app_cookies)
-    return None
+    if cookie_name.startswith(prefix):
+        # Already prefixed
+        return cookie_name
+    return prefix + cookie_name
 
-def prefix_set_cookie(set_cookie_value, app_slug):
+
+def _unprefix_cookie_name(cookie_name, app_slug):
     """
-    Prefix cookie name in Set-Cookie header with app slug and update Path.
-    Preserves all Set-Cookie attributes (Domain, Expires, etc.) but updates Path.
+    Remove app prefix from cookie name.
+    
+    Args:
+        cookie_name: Prefixed cookie name
+        app_slug: App slug that was used as prefix
+    
+    Returns:
+        Original cookie name without prefix
+    """
+    prefix = f'{app_slug}_'
+    if cookie_name.startswith(prefix):
+        return cookie_name[len(prefix):]
+    return cookie_name
+
+
+def _rewrite_cookie_header(cookie_header, app_slug, add_prefix=True):
+    """
+    Rewrite cookie header to add or remove app prefix from cookie names.
+    
+    Args:
+        cookie_header: Cookie header value (e.g., "name1=value1; name2=value2")
+        app_slug: App slug for prefix
+        add_prefix: If True, add prefix. If False, remove prefix.
+    
+    Returns:
+        Rewritten cookie header string
+    """
+    if not cookie_header:
+        return cookie_header
+    
+    cookies = []
+    for cookie_pair in cookie_header.split(';'):
+        cookie_pair = cookie_pair.strip()
+        if '=' in cookie_pair:
+            name, value = cookie_pair.split('=', 1)
+            name = name.strip()
+            value = value.strip()
+            
+            if add_prefix:
+                # Add prefix to cookie name
+                name = _prefix_cookie_name(name, app_slug)
+            else:
+                # Remove prefix from cookie name (only if it has our prefix)
+                name = _unprefix_cookie_name(name, app_slug)
+            
+            cookies.append(f'{name}={value}')
+        else:
+            # Cookie without value (shouldn't happen, but handle it)
+            cookies.append(cookie_pair)
+    
+    return '; '.join(cookies)
+
+
+def _rewrite_set_cookie_header(set_cookie_value, app_slug):
+    """
+    Rewrite Set-Cookie header to add app prefix to cookie name.
+    
+    Args:
+        set_cookie_value: Set-Cookie header value (e.g., "name=value; Path=/; Domain=example.com")
+        app_slug: App slug for prefix
+    
+    Returns:
+        Rewritten Set-Cookie header value with prefixed cookie name
     """
     if not set_cookie_value:
         return set_cookie_value
     
-    # Set-Cookie format: name=value; Path=/; Domain=example.com; Secure; HttpOnly
-    # We need to prefix the cookie name and update the Path attribute
-    parts = set_cookie_value.split(';')
-    name_value_part = parts[0].strip()
-    attribute_parts = [p.strip() for p in parts[1:]] if len(parts) > 1 else []
+    # Parse Set-Cookie header: "name=value; attribute1=value1; attribute2"
+    parts = [p.strip() for p in set_cookie_value.split(';')]
+    if not parts:
+        return set_cookie_value
     
-    if '=' in name_value_part:
-        cookie_name, cookie_value = name_value_part.split('=', 1)
-        cookie_name = cookie_name.strip()
-        cookie_value = cookie_value.strip()
-        
-        # Prefix the cookie name
-        prefixed_name = f'{app_slug}_{cookie_name}'
-        
-        # Update Path attribute to scope cookie to this app's path
-        # Remove existing Path attribute if present
-        updated_attributes = []
-        path_updated = False
-        for attr in attribute_parts:
-            attr_lower = attr.lower()
-            if attr_lower.startswith('path='):
-                # Update Path to include app slug prefix
-                updated_attributes.append(f'Path=/{app_slug}/')
-                path_updated = True
+    # First part is name=value
+    name_value = parts[0]
+    if '=' not in name_value:
+        return set_cookie_value
+    
+    name, value = name_value.split('=', 1)
+    name = name.strip()
+    value = value.strip()
+    
+    # Add prefix to cookie name
+    prefixed_name = _prefix_cookie_name(name, app_slug)
+    
+    # Reconstruct Set-Cookie header with prefixed name
+    result = f'{prefixed_name}={value}'
+    if len(parts) > 1:
+        result += '; ' + '; '.join(parts[1:])
+    
+    return result
+
+
+def rewrite_url(url, app_slug, manager_domain):
+    """
+    Rewrite URL to include /app_slug/ prefix (f function).
+    Golden rule: f(x) prepends /app_slug/ so that g(f(x)) = x where g removes the prefix.
+    
+    This function intelligently detects if a URL already has the prefix by parsing
+    the URL structure rather than relying on string matching.
+    
+    Args:
+        url: URL string to rewrite
+        app_slug: App slug to prepend
+        manager_domain: Manager domain name
+    
+    Returns:
+        Rewritten URL string
+    """
+    if not url or not isinstance(url, str):
+        return url
+    
+    # Skip special URL schemes
+    if url.startswith(('data:', 'javascript:', 'mailto:', 'tel:', '#')):
+        return url
+    
+    # Skip protocol-relative URLs (external CDNs)
+    if url.startswith('//'):
+        return url
+    
+    # Handle absolute URLs
+    if url.startswith('http://') or url.startswith('https://'):
+        try:
+            parsed = urlparse(url)
+            # Rewrite localhost:port URLs to domain/app_slug/path
+            if parsed.netloc.startswith('localhost:') or parsed.netloc.startswith('127.0.0.1:'):
+                # Extract port if present
+                host_parts = parsed.netloc.split(':')
+                if len(host_parts) == 2:
+                    port = host_parts[1]
+                else:
+                    port = None
+                
+                # Build new URL with domain and app_slug prefix
+                protocol = 'https' if url.startswith('https://') else 'http'
+                path = parsed.path if parsed.path else '/'
+                if not path.startswith('/'):
+                    path = '/' + path
+                
+                # Check if path already has app prefix by parsing structure
+                if not _url_has_app_prefix(path, app_slug):
+                    new_path = f'/{app_slug}{path}'
+                else:
+                    # Already has prefix, use as-is
+                    new_path = path
+                
+                new_url = f'{protocol}://{manager_domain}{new_path}'
+                
+                # Preserve query string and fragment
+                if parsed.query:
+                    new_url += f'?{parsed.query}'
+                if parsed.fragment:
+                    new_url += f'#{parsed.fragment}'
+                
+                return new_url
             else:
-                # Keep other attributes as-is
-                updated_attributes.append(attr)
-        
-        # Add Path if it wasn't present
-        if not path_updated:
-            updated_attributes.insert(0, f'Path=/{app_slug}/')
-        
-        # Reconstruct Set-Cookie header
-        if updated_attributes:
-            return f'{prefixed_name}={cookie_value}; ' + '; '.join(updated_attributes)
-        else:
-            return f'{prefixed_name}={cookie_value}; Path=/{app_slug}/'
+                # External domain - don't rewrite
+                return url
+        except Exception:
+            # If parsing fails, return original
+            return url
     
-    # If format is unexpected, return as-is
-    return set_cookie_value
+    # Handle relative URLs (starting with /)
+    if url.startswith('/'):
+        # Parse the URL path to check if it already has the app prefix
+        # This is more robust than string matching
+        if _url_has_app_prefix(url, app_slug):
+            # URL already has the app prefix (app generated it with prefix)
+            # Return as-is to avoid double-prefixing
+            return url
+        # URL doesn't have prefix, add it
+        return f'/{app_slug}{url}'
+    
+    # Relative URLs without leading slash (like "dashboard" or "../parent")
+    # These are relative to current path, prepend app_slug
+    return f'/{app_slug}/{url}' if not url.startswith('/') else f'/{app_slug}{url}'
+
+
+def rewrite_urls_in_content(content, app_slug, manager_domain, content_type=''):
+    """
+    Inject client-side URL rewriting script for JavaScript-generated URLs.
+    
+    IMPORTANT: We do NOT rewrite URLs in HTML/CSS content because:
+    1. If the app uses ProxyFix correctly, it already generates URLs with the prefix
+    2. Server-side rewriting would double-prefix URLs that already have the prefix
+    3. Client-side JavaScript handles dynamic URLs created at runtime
+    
+    Args:
+        content: Content bytes or string
+        app_slug: App slug to prepend to URLs
+        manager_domain: Manager domain name (unused but kept for compatibility)
+        content_type: Content type (to determine if we should inject script)
+    
+    Returns:
+        Content as bytes with client-side rewriting script injected (if HTML)
+    """
+    if not content:
+        return content
+    
+    # Convert to string if bytes
+    try:
+        if isinstance(content, bytes):
+            content_str = content.decode('utf-8', errors='ignore')
+        else:
+            content_str = str(content)
+    except:
+        return content
+    
+    is_html = 'text/html' in content_type.lower()
+    
+    # Only inject script for HTML content
+    # CSS and JavaScript files are passed through unchanged
+    # URLs in HTML attributes (href, src, etc.) should already be correct from ProxyFix
+    if not is_html:
+        return content if isinstance(content, bytes) else content_str.encode('utf-8')
+    
+    # NOTE: We no longer rewrite HTML/CSS URLs server-side because:
+    # - Apps using ProxyFix already generate correct URLs with prefix
+    # - Server-side rewriting would cause double-prefixing
+    # - Client-side JavaScript handles dynamic URLs created at runtime
+    
+    # Inject client-side script for dynamic JavaScript URLs only
+    if is_html and '<head' in content_str.lower():
+        # Load and render the rewrite script template
+        try:
+            # Use Flask's template loader to get the template source
+            template = current_app.jinja_env.get_template('proxy_rewrite_script.html')
+            rewrite_script = template.render(app_slug=app_slug)
+        except Exception as e:
+            logger.error(f"Error loading rewrite script template: {e}")
+            # Fallback: return content without script injection
+            return content_str.encode('utf-8')
+        
+        # Insert script after <head> tag
+        # IMPORTANT: Check if script is already present to prevent double-injection
+        if '__APP_MANAGER_REWRITE_LOADED' not in content_str:
+            head_pattern = re.compile(r'(<head[^>]*>)', re.IGNORECASE)
+            if head_pattern.search(content_str):
+                content_str = head_pattern.sub(rf'\1\n{rewrite_script}', content_str, count=1)
+            else:
+                html_pattern = re.compile(r'(<html[^>]*>)', re.IGNORECASE)
+                if html_pattern.search(content_str):
+                    content_str = html_pattern.sub(rf'\1\n  <head>{rewrite_script}</head>', content_str, count=1)
+    
+    return content_str.encode('utf-8')
+
 
 @bp.route('/<app_slug>', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
 @bp.route('/<app_slug>/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
 def proxy_path(app_slug, path):
-    """Proxy requests to an app using its URL-safe name (slug)"""
+    """
+    Proxy requests to an app using its URL-safe name (slug).
+    
+    URL structure: {domain_name}/{app_slug}/{path}
+    Proxies to: localhost:{port}/{path}
+    
+    Special case: /blackgrid/ routes are NOT proxied (handled by AppManager routes)
+    """
+    app_port = None
+    app_name = app_slug
+    
     try:
-        # Log the incoming request for debugging
-        logger.debug(f"Proxy request: app_slug={app_slug}, path={path}, method={request.method}")
+        # Special case: /blackgrid/ is AppManager, don't proxy
+        if app_slug == MANAGER_PREFIX:
+            from flask import abort
+            abort(404)  # Let AppManager routes handle it
         
-        # Look up app by slug
+        if not IS_PRODUCTION:
+            logger.debug(f"Proxy request: app_slug={app_slug}, path={path}, method={request.method}")
+        
         try:
             app_config = AppConfig.get_by_slug(app_slug)
         except Exception as e:
-            # Log the error with full traceback
             logger.error(f"Error looking up app by slug '{app_slug}': {str(e)}\n{traceback.format_exc()}")
-            # Also log to Flask logger if available
             try:
                 current_app.logger.error(f"Error looking up app by slug '{app_slug}': {str(e)}", exc_info=True)
             except:
@@ -195,14 +391,11 @@ def proxy_path(app_slug, path):
             return f"Error loading app configuration: {str(e)}", 500
         
         if not app_config:
-            # App not found, return not found page
-            logger.warning(f"App not found for slug: {app_slug}")
+            logger.warning(f"App not found for slug: {app_slug} (path was: {path})")
             from flask import render_template
             return render_template('app_not_found.html'), 404
         
-        # Check if app is set to be served
         if not app_config.get('serve_app', True):
-            # App exists but is not being served, return not found page
             logger.info(f"App {app_slug} exists but is not set to be served")
             from flask import render_template
             return render_template('app_not_found.html'), 404
@@ -210,90 +403,248 @@ def proxy_path(app_slug, path):
         app_port = app_config['port']
         app_name = app_config['name']
         
-        # Build target URL
+        # Record app access for usage tracking
+        try:
+            from app.utils.app_usage_tracker import get_tracker
+            tracker = get_tracker(current_app.instance_path)
+            tracker.record_access(app_slug)
+        except Exception as e:
+            logger.warning(f"Error recording app access: {e}")
+        
+        # Check if app is running, if not start it
+        from app.utils.app_manager import test_app_port, start_app_service
+        is_running = test_app_port(app_port)
+        
+        if not is_running:
+            # App is not running, try to start it
+            service_name = app_config.get('service_name')
+            if service_name:
+                logger.info(f"App {app_name} is not running, attempting to start service {service_name}")
+                success, message = start_app_service(service_name)
+                
+                if success:
+                    # Wait for app to start (poll up to 30 seconds)
+                    max_wait = 30
+                    wait_interval = 0.5
+                    waited = 0
+                    while waited < max_wait:
+                        time.sleep(wait_interval)
+                        waited += wait_interval
+                        if test_app_port(app_port):
+                            logger.info(f"App {app_name} started successfully after {waited:.1f}s")
+                            break
+                    else:
+                        # App didn't start in time
+                        logger.warning(f"App {app_name} did not start within {max_wait}s")
+                        # Continue anyway - might be starting slowly
+                else:
+                    logger.warning(f"Failed to start app {app_name}: {message}")
+                    # Continue anyway - might already be starting or service name might be wrong
+            
+            # If app is still not running and this is a GET request, show loading page
+            if not test_app_port(app_port) and request.method == 'GET':
+                # Check if this is an AJAX request
+                is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+                         request.accept_mimetypes.best_match(['application/json', 'text/html']) == 'application/json'
+                
+                if not is_ajax:
+                    # Show loading page for regular browser requests
+                    from flask import render_template_string
+                    loading_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Starting {{ app_name }}...</title>
+    <meta http-equiv="refresh" content="2">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 2em;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        p {
+            margin: 10px 0;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Starting {{ app_name }}...</h1>
+        <div class="spinner"></div>
+        <p>Please wait while we bring the app online.</p>
+        <p style="font-size: 0.9em; opacity: 0.7;">This page will refresh automatically.</p>
+    </div>
+</body>
+</html>
+                    """
+                    return render_template_string(loading_html, app_name=app_name), 503
+                else:
+                    # Return JSON for AJAX requests
+                    return jsonify({
+                        'error': 'App is starting',
+                        'message': f'{app_name} is being brought online. Please try again in a moment.',
+                        'retry_after': 2
+                    }), 503
+        
+        # Build target URL - proxy to localhost:{port}/{path}
         target_url = f"http://localhost:{app_port}/{path}"
         
-        # Add query string if present
+        # Add query string if present, stripping the processed marker (__bg_rw=1)
         if request.query_string:
-            target_url += f"?{request.query_string.decode()}"
-        # Forward the request
+            query_string = request.query_string.decode()
+            # Parse query string and remove the marker
+            query_params = parse_qs(query_string, keep_blank_values=True)
+            # Remove the processed marker if present
+            if '__bg_rw' in query_params:
+                del query_params['__bg_rw']
+            # Reconstruct query string without the marker
+            if query_params:
+                # Convert parse_qs format (list values) back to query string
+                # parse_qs returns lists, but we need to handle single values
+                query_pairs = []
+                for key, values in query_params.items():
+                    for value in values:
+                        query_pairs.append((key, value))
+                clean_query = urlencode(query_pairs)
+                target_url += f"?{clean_query}"
+        
+        # Get manager domain for headers
+        manager_domain = get_manager_domain()
+        
+        # Get client IP address (handle proxy chains)
+        client_ip = request.remote_addr
+        if request.headers.get('X-Forwarded-For'):
+            # X-Forwarded-For can contain multiple IPs, take the first (original client)
+            forwarded_for = request.headers.get('X-Forwarded-For').split(',')[0].strip()
+            if forwarded_for:
+                client_ip = forwarded_for
+        elif request.headers.get('X-Real-IP'):
+            client_ip = request.headers.get('X-Real-IP')
+        
+        # Determine protocol (http or https)
+        # Check if request is secure (HTTPS) - Flask's ProxyFix middleware handles this
+        protocol = 'https' if request.is_secure else 'http'
+        
+        # Determine public-facing port
+        # Check if we have a port in the Host header or use standard ports
+        host_header = request.host
+        if ':' in host_header:
+            public_port = int(host_header.split(':')[1])
+        else:
+            # Use standard ports based on protocol
+            public_port = 443 if protocol == 'https' else 80
+        
+        # Forward the request with ProxyFix-compatible headers
         method = request.method
-        headers = dict(request.headers)
+        headers = {}
         
-        # Remove headers that shouldn't be forwarded or might cause issues
-        headers.pop('Host', None)
-        headers.pop('Content-Length', None)  # Will be recalculated by requests library
-        headers.pop('Connection', None)  # Connection header is managed by requests library
-        headers.pop('Accept-Encoding', None)  # Let requests handle encoding
+        # Copy relevant headers from original request (excluding ones we'll set explicitly)
+        excluded_headers = {
+            'host', 'x-forwarded-for', 'x-real-ip', 'x-forwarded-proto', 
+            'x-forwarded-host', 'x-forwarded-port', 'x-forwarded-prefix'
+        }
         
-        # Set Host header explicitly to match the target URL
-        # This ensures the app receives the correct Host header
+        for name, value in request.headers:
+            name_lower = name.lower()
+            if name_lower not in excluded_headers:
+                # Handle Cookie header: strip app prefix before forwarding to app
+                if name_lower == 'cookie':
+                    # Rewrite cookie header to remove prefix (app sees cookies without prefix)
+                    value = _rewrite_cookie_header(value, app_slug, add_prefix=False)
+                headers[name] = value
+        
+        # Set Host header to localhost:port (required for proxying to internal app)
+        # Note: The Host header must be localhost:port for the internal proxy request to work.
+        # The public domain is communicated via X-Forwarded-Host header below.
         headers['Host'] = f'localhost:{app_port}'
         
-        # Handle X-Forwarded-* headers - append rather than replace if they exist
-        # This preserves the forwarding chain
-        if 'X-Forwarded-For' in request.headers:
-            # Append our IP to the existing chain
-            existing_forwarded = request.headers.get('X-Forwarded-For', '')
-            client_ip = request.remote_addr or 'unknown'
-            headers['X-Forwarded-For'] = f"{existing_forwarded}, {client_ip}".strip(', ')
-        else:
-            # Set initial X-Forwarded-For
-            headers['X-Forwarded-For'] = request.remote_addr or 'unknown'
+        # Set X-Forwarded-* headers for ProxyFix middleware
+        # These tell the proxied app about the original client and public-facing setup
+        # ProxyFix middleware will use these headers to generate correct URLs
+        headers['X-Forwarded-For'] = client_ip
+        headers['X-Real-IP'] = client_ip
+        headers['X-Forwarded-Proto'] = protocol
+        headers['X-Forwarded-Host'] = manager_domain  # Public domain name (not localhost)
+        headers['X-Forwarded-Port'] = str(public_port)  # Public-facing port (usually 80 or 443)
+        headers['X-Forwarded-Prefix'] = f'/{app_slug}'  # URL prefix for the app
         
-        # Set X-Real-IP if not already set
-        if 'X-Real-IP' not in headers:
-            headers['X-Real-IP'] = request.remote_addr or 'unknown'
+        # Handle WebSocket upgrades
+        # Pass through Upgrade and Connection headers if present
+        upgrade_header = request.headers.get('Upgrade', '')
+        connection_header = request.headers.get('Connection', '')
         
-        # Isolate cookies for this app - only forward cookies prefixed with app_slug_
-        # This prevents cookie conflicts between apps
-        cookie_header = headers.get('Cookie')
-        if cookie_header:
-            isolated_cookies = isolate_cookies_for_app(cookie_header, app_slug)
-            if isolated_cookies:
-                headers['Cookie'] = isolated_cookies
+        if upgrade_header and upgrade_header.lower() == 'websocket':
+            headers['Upgrade'] = upgrade_header
+            # Connection header should be 'upgrade' or 'Upgrade' for WebSocket
+            if connection_header:
+                headers['Connection'] = connection_header
             else:
-                # No cookies for this app, remove Cookie header
-                headers.pop('Cookie', None)
-        else:
-            # No cookies at all, ensure Cookie header is not present
-            headers.pop('Cookie', None)
+                # Set default Connection header for WebSocket if not provided
+                headers['Connection'] = 'upgrade'
+        elif connection_header and 'upgrade' in connection_header.lower():
+            # Also pass through Connection: upgrade even if Upgrade header isn't websocket
+            # (some clients may use different upgrade protocols)
+            headers['Connection'] = connection_header
+            if upgrade_header:
+                headers['Upgrade'] = upgrade_header
         
-        # Forward request data - handle JSON and form data appropriately
+        # Forward request data
         data = None
         json_data = None
         
-        # Check if this is a JSON request
         content_type = headers.get('Content-Type', '').lower()
         if 'application/json' in content_type:
-            # Forward as JSON - preserve Content-Type header
             try:
                 json_data = request.get_json(force=True)
-                # Ensure Content-Type is set for JSON
                 if 'application/json' not in headers.get('Content-Type', ''):
                     headers['Content-Type'] = 'application/json'
             except Exception:
-                # If JSON parsing fails, send raw data but keep original Content-Type
                 data = request.get_data()
         else:
-            # For form data or other types, send raw data
             data = request.get_data()
-            # Preserve original Content-Type if present
-            if not headers.get('Content-Type') and request.content_type:
-                headers['Content-Type'] = request.content_type
+        if not headers.get('Content-Type') and request.content_type:
+            headers['Content-Type'] = request.content_type
         
-        params = dict(request.args)
-        
-        # Make request to internal app using session for connection pooling
-        # Use json parameter for JSON data, data parameter for other types
+        # Make request to internal app
+        # Note: params are already in target_url query string, don't pass separately
+        # Use increased timeouts for WebSocket and long-polling support
         request_kwargs = {
             'method': method,
-            'url': target_url,
+            'url': target_url,  # Already includes query string
             'headers': headers,
-            'params': params,
             'allow_redirects': False,
             'stream': True,
-            'timeout': 30
+            'timeout': (75, 300)  # (connect_timeout, read_timeout) - 75s connect, 300s read for long-polling/WebSocket
         }
         
         if json_data is not None:
@@ -303,381 +654,181 @@ def proxy_path(app_slug, path):
         
         resp = _session.request(**request_kwargs)
         
-        # Log 500 errors for debugging (but don't consume the stream yet)
-        if resp.status_code == 500:
-            logger.warning(f"App {app_name} (port {app_port}) returned 500 error for path '{path}'. Full error will be logged after reading response.")
-            logger.warning(f"Request details - Method: {method}, Target URL: {target_url}, Headers sent: {dict(headers)}")
-            # Also log to Flask logger
-            try:
-                current_app.logger.warning(f"App {app_name} (port {app_port}) returned 500 error for path '{path}'")
-            except:
-                pass
+        # Build response headers - rewrite Location headers for redirects
+        # Exclude headers that should be handled by the proxy, not passed through
+        # Note: Connection header is excluded except for WebSocket upgrades (101 status)
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding']
         
-        # Build response headers (exclude some that shouldn't be forwarded)
-        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        # For WebSocket upgrades (101 Switching Protocols), we need to pass through Connection and Upgrade headers
+        is_websocket_upgrade = resp.status_code == 101
+        
+        if not is_websocket_upgrade:
+            # Exclude Connection header for non-WebSocket responses (let Flask handle it)
+            excluded_headers.append('connection')
+        
         response_headers = []
         
-        # Process headers and rewrite Location header for redirects
+        # Handle Set-Cookie headers separately to support multiple Set-Cookie headers
+        set_cookie_headers = []
         try:
-            # Try to use raw headers first (more complete)
+            # Try to get all Set-Cookie headers using getlist (supports multiple values)
+            if hasattr(resp.raw.headers, 'getlist'):
+                set_cookie_headers = resp.raw.headers.getlist('Set-Cookie')
+            elif hasattr(resp.headers, 'getlist'):
+                set_cookie_headers = resp.headers.getlist('Set-Cookie')
+            else:
+                # Fallback: try to get single Set-Cookie header
+                set_cookie = resp.headers.get('Set-Cookie')
+                if set_cookie:
+                    set_cookie_headers = [set_cookie]
+        except Exception as e:
+            logger.warning(f"Error reading Set-Cookie headers from {app_name} (port {app_port}): {e}")
+        
+        # Process Set-Cookie headers with prefix
+        for set_cookie_value in set_cookie_headers:
+            rewritten_set_cookie = _rewrite_set_cookie_header(set_cookie_value, app_slug)
+            response_headers.append(('Set-Cookie', rewritten_set_cookie))
+        
+        # Process other headers
+        try:
             raw_headers = resp.raw.headers.items()
         except (AttributeError, Exception) as e:
             logger.warning(f"Error reading raw headers from {app_name} (port {app_port}): {e}")
-            # Fallback to regular headers
             try:
                 raw_headers = resp.headers.items()
             except Exception as e2:
                 logger.error(f"Error reading headers from {app_name} (port {app_port}): {e2}")
-                try:
-                    current_app.logger.error(f"Error reading headers from {app_name} (port {app_port}): {e2}", exc_info=True)
-                except:
-                    pass
-                print(f"[ERROR] Error reading headers from {app_name} (port {app_port}): {e2}", flush=True)
                 raw_headers = []
         
         for name, value in raw_headers:
             name_lower = name.lower()
+            # Skip Set-Cookie as we already processed it above
+            if name_lower == 'set-cookie':
+                continue
             if name_lower not in excluded_headers:
-                # Prefix Set-Cookie headers with app slug to prevent conflicts
-                if name_lower == 'set-cookie':
-                    value = prefix_set_cookie(value, app_slug)
-                
-                # Rewrite Location header for redirects to use app slug path (masks port)
+                # Rewrite Location header for redirects
                 if name_lower == 'location' and resp.status_code in (301, 302, 303, 307, 308):
-                    from urllib.parse import urlparse, urlunparse
-                    
-                    # Rewrite relative URLs to use app slug prefix
-                    if value.startswith('/') and not value.startswith('//'):
-                        value = f'/{app_slug}{value}'
-                    # Rewrite full URLs pointing to localhost or the app port
-                    elif value.startswith('http://') or value.startswith('https://'):
-                        try:
-                            parsed = urlparse(value)
-                            # Check if URL points to localhost or contains the app port
-                            host = parsed.netloc.split(':')[0]  # Remove port if present
-                            port_in_url = parsed.netloc.split(':')[1] if ':' in parsed.netloc else None
-                            
-                            if (host in ('localhost', '127.0.0.1') or 
-                                port_in_url == str(app_port) or
-                                (host == current_app.config.get('SERVER_ADDRESS', '').split(':')[0] and 
-                                 port_in_url == str(app_port))):
-                                # Extract path and query, rewrite to app slug path
-                                path_part = parsed.path if parsed.path else '/'
-                                query = parsed.query
-                                fragment = parsed.fragment
-                                
-                                # Build new relative URL with app slug prefix
-                                new_path = f'/{app_slug}{path_part}' if path_part.startswith('/') else f'/{app_slug}/{path_part}'
-                                if query:
-                                    value = f'{new_path}?{query}'
-                                    if fragment:
-                                        value += f'#{fragment}'
-                                elif fragment:
-                                    value = f'{new_path}#{fragment}'
-                                else:
-                                    value = new_path
-                        except Exception:
-                            # If parsing fails, try simple string replacement
-                            if f':{app_port}/' in value or 'localhost' in value:
-                                # Extract path after domain/port
-                                if '/' in value.split('://', 1)[-1]:
-                                    path_part = '/' + '/'.join(value.split('://', 1)[-1].split('/', 1)[-1:])
-                                    value = f'/{app_slug}{path_part}'
-                                else:
-                                    value = f'/{app_slug}'
+                    value = rewrite_url(value, app_slug, manager_domain)
+                
                 response_headers.append((name, value))
         
-        # Check if this is HTML, CSS, or JavaScript content that needs URL rewriting
-        content_type = resp.headers.get('Content-Type', '').lower()
-        # More lenient HTML detection - also check if content starts with HTML tags
-        is_html = 'text/html' in content_type or content_type.startswith('text/html')
-        is_css = 'text/css' in content_type
-        # JavaScript detection - check content-type and file extension
-        # Also check the request path in case content-type is missing
-        request_path = request.path.lower()
-        is_js = (
-            'application/javascript' in content_type or 
-            'text/javascript' in content_type or
-            'application/x-javascript' in content_type or
-            'application/ecmascript' in content_type or
-            (content_type.startswith('text/') and 'javascript' in content_type) or
-            path.endswith('.js') or  # Check proxy path
-            request_path.endswith('.js') or  # Check request path
-            '/js/' in request_path or  # Common JS directory
-            '/static/js/' in request_path  # Common static JS path
-        )
-        needs_rewriting = is_html or is_css or is_js
+        # Check if content needs client-side script injection
+        # IMPORTANT: We do NOT rewrite HTML/CSS URLs server-side because:
+        # - Apps using ProxyFix already generate correct URLs with prefix
+        # - Server-side rewriting would cause double-prefixing
+        # - We only inject client-side JavaScript for dynamic URLs created at runtime
+        content_type = resp.headers.get('Content-Type', 'application/octet-stream')
+        is_html = 'text/html' in content_type.lower()
         
-        # Check content length to decide if we should rewrite
-        MAX_REWRITE_SIZE = 16 * 1024 * 1024  # 16MB
+        # Only inject script for HTML content (for dynamic JavaScript URLs)
+        # CSS and JavaScript files pass through unchanged
+        needs_script_injection = is_html
+        
+        # Check content length - only inject script if reasonable size
+        MAX_INJECT_SIZE = 16 * 1024 * 1024  # 16MB
         content_length = resp.headers.get('Content-Length')
-        should_rewrite = needs_rewriting and (
-            content_length is None or int(content_length) <= MAX_REWRITE_SIZE
+        should_inject_script = needs_script_injection and (
+            content_length is None or int(content_length) <= MAX_INJECT_SIZE
         )
         
-        # If content-type is missing or generic and we haven't detected HTML yet, 
-        # we'll check after loading content (but only if size is reasonable)
-        if not is_html and should_rewrite and (not content_type or 'text/' not in content_type):
-            # We'll check the content after loading it below
-            pass
-        
-        # For non-HTML/CSS content or large files, stream directly without loading into memory
-        if not should_rewrite:
-            def generate():
-                try:
-                    for chunk in resp.iter_content(chunk_size=8192):
-                        if chunk:
-                            yield chunk
-                except Exception as e:
-                    logger.error(f"Error streaming content from {app_name} (port {app_port}): {e}")
-                    try:
-                        current_app.logger.error(f"Error streaming content from {app_name} (port {app_port}): {e}", exc_info=True)
-                    except:
-                        pass
-                    print(f"[ERROR] Error streaming content from {app_name} (port {app_port}): {e}", flush=True)
-                    yield b'Error streaming content'
-            
-            return Response(
-                generate(),
-                status=resp.status_code,
-                headers=response_headers,
-                mimetype=content_type or 'application/octet-stream'
-            )
-        
-        # For HTML/CSS that's small enough, load and rewrite URLs
-        # Note: resp.content will read the entire stream, so we only do this for small files
-        try:
-            content = resp.content
-        except Exception as e:
-            error_msg = f"Error reading response content from {app_name} (port {app_port}) for path '{path}': {e}"
-            logger.error(error_msg)
+        if should_inject_script:
+            # Capture full content and inject client-side rewriting script
             try:
-                current_app.logger.error(error_msg, exc_info=True)
-            except:
-                pass
-            print(f"[ERROR] {error_msg}", flush=True)
-            return f"Error reading response from app: {str(e)}", 502
-        
-        # Log full error details for 500 errors after reading content
-        if resp.status_code == 500:
-            try:
-                error_preview = content[:2000].decode('utf-8', errors='ignore') if content else 'Empty response body'
-                error_msg = f"App {app_name} (port {app_port}) 500 error details for path '{path}':\n{error_preview}\n\nRequest method: {method}, Headers sent: {dict(headers)}, Target URL: {target_url}"
-                logger.error(error_msg)
-                # Also log to Flask logger and print to console
-                try:
-                    current_app.logger.error(error_msg)
-                except:
-                    pass
-                # Print to console/stderr so it's visible even if logging isn't configured
-                print(f"[ERROR] {error_msg}", flush=True)
+                content = resp.content
+                
+                # Double-check size
+                if len(content) > MAX_INJECT_SIZE:
+                    # Too large, stream as-is
+                    def generate():
+                        yield content
+                    return Response(
+                        generate(),
+                        status=resp.status_code,
+                        headers=response_headers,
+                        mimetype=content_type
+                    )
+                
+                # Inject client-side script for dynamic URLs (no server-side rewriting)
+                content = rewrite_urls_in_content(content, app_slug, manager_domain, content_type)
+                
+                return Response(
+                    content,
+                    status=resp.status_code,
+                    headers=response_headers,
+                    mimetype=content_type
+                )
             except Exception as e:
-                error_msg = f"App {app_name} (port {app_port}) 500 error for path '{path}' (unable to decode error body: {e})"
-                logger.error(error_msg)
-                try:
-                    current_app.logger.error(error_msg, exc_info=True)
-                except:
-                    pass
-                print(f"[ERROR] {error_msg}", flush=True)
-        
-        # Double-check size (Content-Length might be wrong or missing)
-        if len(content) > MAX_REWRITE_SIZE:
-            # Too large, stream without rewriting
-            def generate():
-                yield content  # Already loaded, just yield it
-            
-            return Response(
-                generate(),
-                status=resp.status_code,
-                headers=response_headers,
-                mimetype=content_type
-            )
-        
-        # For 500 errors, don't try to rewrite content - just return it as-is
-        # This ensures we don't accidentally break error pages
-        if resp.status_code == 500:
-            return Response(
-                content,
-                status=resp.status_code,
-                headers=response_headers,
-                mimetype=content_type
-            )
-        
-        # If we haven't detected HTML yet but content looks like HTML, detect it now
-        if not is_html and should_rewrite:
-            peek_content = content[:512] if len(content) > 512 else content
-            if (peek_content.startswith(b'<html') or 
-                peek_content.startswith(b'<!DOCTYPE') or 
-                b'<html' in peek_content[:200] or
-                (b'<head' in peek_content and b'<body' in peek_content)):
-                is_html = True
-                needs_rewriting = True
-        
-        # Rewrite URLs in HTML/CSS/JS content using app-specific patterns
-        try:
-            # Get patterns for this specific app
-            html_css_patterns, js_patterns = make_patterns_for_app(app_slug)
-            
-            # Decode content to string for processing
-            content_str = content.decode('utf-8', errors='ignore')
-            
-            # Choose appropriate patterns based on content type
-            if is_js:
-                # Apply JavaScript-specific patterns
-                for pattern, replacement in js_patterns:
-                    content_str = pattern.sub(replacement, content_str)
-            elif is_html:
-                # Apply HTML/CSS patterns to rewrite absolute URLs to include app slug prefix
-                # This ensures browser requests go through the proxy
-                for pattern, replacement in html_css_patterns:
-                    content_str = pattern.sub(replacement, content_str)
-                
-                # Add or update base tag to ensure relative paths resolve correctly
-                # This makes relative URLs work as if the app is at the root
-                base_tag_pattern = re.compile(r'<base\s+[^>]*href=["\']([^"\']+)["\'][^>]*>', re.IGNORECASE)
-                base_tag_replacement = f'<base href="/{app_slug}/">'
-                
-                # Check if base tag exists
-                if base_tag_pattern.search(content_str):
-                    # Replace existing base tag to point to app slug path
-                    content_str = base_tag_pattern.sub(base_tag_replacement, content_str)
-                else:
-                    # Insert base tag after <head> tag if it exists
-                    head_pattern = re.compile(r'(<head[^>]*>)', re.IGNORECASE)
-                    if head_pattern.search(content_str):
-                        content_str = head_pattern.sub(rf'\1\n    {base_tag_replacement}', content_str, count=1)
-                    else:
-                        # If no head tag, try to insert after <html>
-                        html_pattern = re.compile(r'(<html[^>]*>)', re.IGNORECASE)
-                        if html_pattern.search(content_str):
-                            content_str = html_pattern.sub(rf'\1\n  {base_tag_replacement}', content_str, count=1)
-                
-                # Inject favicon links if app has a logo
-                if app_config.get('logo'):
-                    try:
-                        # Generate favicon URL - logo path is stored as "uploads/logos/filename.png"
-                        # Route is /admin/uploads/<path:filename>, so URL is /admin/uploads/uploads/logos/filename.png
-                        # Admin routes are at root level, not under app slug
-                        logo_path = app_config['logo']
-                        favicon_url = f'/admin/uploads/{logo_path}'
-                        
-                        # Create favicon link tags
-                        favicon_tags = f'''    <link rel="icon" type="image/png" href="{favicon_url}">
-    <link rel="shortcut icon" type="image/png" href="{favicon_url}">
-    <link rel="apple-touch-icon" href="{favicon_url}">'''
-                        
-                        # Remove existing favicon links to avoid duplicates
-                        favicon_pattern = re.compile(
-                            r'<link\s+[^>]*rel=["\'](?:icon|shortcut\s+icon|apple-touch-icon)["\'][^>]*>',
-                            re.IGNORECASE
-                        )
-                        content_str = favicon_pattern.sub('', content_str)
-                        
-                        # Insert favicon links after <head> tag or after base tag if it exists
-                        base_tag_pattern = re.compile(r'(<base\s+[^>]*href=["\'][^"\']+["\'][^>]*>)', re.IGNORECASE)
-                        if base_tag_pattern.search(content_str):
-                            # Insert after base tag
-                            content_str = base_tag_pattern.sub(rf'\1\n{favicon_tags}', content_str, count=1)
-                        else:
-                            # Insert after <head> tag
-                            head_pattern = re.compile(r'(<head[^>]*>)', re.IGNORECASE)
-                            if head_pattern.search(content_str):
-                                content_str = head_pattern.sub(rf'\1\n{favicon_tags}', content_str, count=1)
-                            else:
-                                # If no head tag, try to insert after <html>
-                                html_pattern = re.compile(r'(<html[^>]*>)', re.IGNORECASE)
-                                if html_pattern.search(content_str):
-                                    content_str = html_pattern.sub(rf'\1\n  <head>\n{favicon_tags}\n  </head>', content_str, count=1)
-                    except Exception as e:
-                        # If favicon injection fails, continue without it
-                        logger.warning(f"Failed to inject favicon for app {app_slug}: {e}")
-                
-                # Also rewrite JavaScript in inline <script> tags
-                for pattern, replacement in js_patterns:
-                    content_str = pattern.sub(replacement, content_str)
-            else:
-                # Apply HTML/CSS patterns (for CSS files)
-                for pattern, replacement in html_css_patterns:
-                    content_str = pattern.sub(replacement, content_str)
-            
-            # Re-encode to bytes
-            content = content_str.encode('utf-8')
-        except Exception as e:
-            # If rewriting fails, use original content
-            error_msg = f"Error rewriting content for app {app_slug}: {e}"
-            logger.error(error_msg)
-            try:
-                current_app.logger.error(error_msg, exc_info=True)
-            except:
+                logger.error(f"Error injecting script for {app_name}: {e}")
+                # Fall through to streaming
                 pass
-            print(f"[ERROR] {error_msg}", flush=True)
-            # Continue with original content - don't fail the request
         
-        # Create Flask response
+        # Stream response content directly (for binary files or large content)
+        def generate():
+            try:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+            except Exception as e:
+                logger.error(f"Error streaming content from {app_name} (port {app_port}): {e}")
+                yield b'Error streaming content'
+        
         return Response(
-            content,
+            generate(),
             status=resp.status_code,
             headers=response_headers,
             mimetype=content_type
         )
     
     except requests.exceptions.ConnectionError as e:
-        # App is not responding
         error_msg = f"Connection error proxying to {app_name} (port {app_port}): {e}"
         logger.error(error_msg)
-        try:
-            current_app.logger.error(error_msg, exc_info=True)
-        except:
-            pass
-        print(f"[ERROR] {error_msg}", flush=True)
-        return f"App on port {app_port} is not responding. Please check if the app is running.", 503
+        port_msg = f" on port {app_port}" if app_port else ""
+        return f"App{port_msg} is not responding. Please check if the app is running.", 503
     except requests.exceptions.Timeout as e:
         error_msg = f"Timeout error proxying to {app_name} (port {app_port}): {e}"
         logger.error(error_msg)
-        try:
-            current_app.logger.error(error_msg, exc_info=True)
-        except:
-            pass
-        print(f"[ERROR] {error_msg}", flush=True)
         return "Request to app timed out.", 504
     except (ResponseError, MaxRetryError) as e:
-        # Handle retry errors - this usually means the app returned multiple 500 errors
         error_msg = f"Retry error proxying to {app_name} (port {app_port}): {e}"
         logger.error(error_msg)
-        try:
-            current_app.logger.error(error_msg, exc_info=True)
-        except:
-            pass
-        print(f"[ERROR] {error_msg}", flush=True)
-        # Try to get more details from the exception
-        error_details = str(e)
-        if hasattr(e, 'reason') and hasattr(e.reason, 'response'):
-            try:
-                response = e.reason.response
-                status_code = response.status_code if response else 'unknown'
-                error_details += f" (Last status: {status_code})"
-            except:
-                pass
-        return f"Error proxying request: {error_details}. The app on port {app_port} may be returning errors.", 502
+        port_msg = f" on port {app_port}" if app_port else ""
+        return f"Error proxying request: {str(e)}. The app{port_msg} may be returning errors.", 502
     except requests.exceptions.RequestException as e:
-        # Handle other requests library errors
         error_msg = f"Request error proxying to {app_name} (port {app_port}): {e}"
         logger.error(error_msg)
-        try:
-            current_app.logger.error(error_msg, exc_info=True)
-        except:
-            pass
-        print(f"[ERROR] {error_msg}", flush=True)
         return f"Error proxying request: {str(e)}", 502
     except Exception as e:
-        # Catch any other exceptions in the proxy route itself
         error_trace = traceback.format_exc()
         error_msg = f"Unexpected error in proxy route for {app_slug} (path: {path}): {e}\n{error_trace}"
         logger.error(error_msg)
-        try:
-            current_app.logger.error(error_msg, exc_info=True)
-        except:
-            pass
-        print(f"[ERROR] {error_msg}", flush=True)
         return f"Internal proxy error: {str(e)}. Check server logs for details.", 500
 
+
+@bp.route('/<app_slug>/__heartbeat__', methods=['GET', 'POST'])
+def heartbeat(app_slug):
+    """
+    Heartbeat endpoint to keep apps alive when browser tabs are open.
+    This endpoint is called periodically by client-side JavaScript.
+    """
+    try:
+        # Get session ID from request (use a cookie or generate one)
+        import uuid
+        session_id = request.cookies.get('__app_session_id')
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        
+        # Record active tab
+        try:
+            from app.utils.app_usage_tracker import get_tracker
+            tracker = get_tracker(current_app.instance_path)
+            tracker.register_active_tab(app_slug, session_id)
+        except Exception as e:
+            logger.warning(f"Error recording heartbeat: {e}")
+        
+        # Return success response with session ID cookie
+        response = jsonify({'status': 'ok', 'session_id': session_id})
+        response.set_cookie('__app_session_id', session_id, max_age=3600*24)  # 24 hours
+        return response
+    except Exception as e:
+        logger.error(f"Error in heartbeat endpoint: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
