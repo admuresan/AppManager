@@ -694,6 +694,55 @@ sudo systemctl restart myapp.service
 
 ---
 
+## Upstream Proxy Configuration (Optional)
+
+If you have an upstream proxy (e.g., nginx) in front of AppManager that handles SSL termination or additional routing, you may need to configure it to set the appropriate X-Forwarded-* headers.
+
+### AppManager Routes
+
+AppManager's own routes are prefixed with `/blackgrid`:
+- Welcome page: `/blackgrid/`
+- Admin panel: `/blackgrid/admin/`
+
+If your upstream proxy forwards requests to AppManager, it should set the `X-Forwarded-Prefix` header for AppManager routes:
+
+**Example nginx configuration:**
+
+```nginx
+# Forward AppManager routes with prefix
+location /blackgrid {
+    proxy_pass http://localhost:5000;  # AppManager port
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Port $server_port;
+    proxy_set_header X-Forwarded-Prefix /blackgrid;  # Important for AppManager routes
+}
+
+# Forward all other routes (individual apps) to AppManager
+location / {
+    proxy_pass http://localhost:5000;  # AppManager port
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Port $server_port;
+    # Note: X-Forwarded-Prefix is set by AppManager for individual apps
+}
+```
+
+### Request Flow
+
+1. **Client** → `https://blackgrid.ddns.net/{app_name}/path`
+2. **Upstream Proxy (nginx)** → Forwards to AppManager on port 80/443 or internal port
+3. **AppManager** → Proxies to `localhost:{port}/path` with X-Forwarded-* headers
+4. **Individual App** → Processes request using ProxyFix middleware
+
+**Note:** If AppManager is directly listening on ports 80/443 (no upstream proxy), no additional configuration is needed. AppManager handles all routing internally.
+
+---
+
 ## Additional Resources
 
 - **SERVICE_NAME_GUIDE.md** - Detailed guide on finding and using service names
