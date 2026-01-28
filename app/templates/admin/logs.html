@@ -1,6 +1,7 @@
+{# IMPORTANT: Read `instructions/architecture` before making changes. #}
 {% extends "base.html" %}
 
-{% block title %}Logs - {{ app_name }} - AppManager{% endblock %}
+{% block title %}{{ t('logs.page_title', app_name=app_name) }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -264,7 +265,7 @@
 
 {% block content %}
 <!-- Manager Icon in Top Right -->
-<a href="{{ url_for('admin.dashboard') }}" class="manager-icon" title="Back to Dashboard">
+<a href="{{ url_for('admin.dashboard') }}" class="manager-icon" title="{{ t('logs.icon_title') }}">
     ⚙️
 </a>
 
@@ -275,16 +276,16 @@
             <div class="logs-header-info">
                 <p><strong>Port:</strong> {{ app.port }}</p>
                 {% if service_name %}
-                <p><strong>Service:</strong> {{ service_name }}</p>
+                <p><strong>{{ t('logs.service_label') }}</strong> {{ service_name }}</p>
                 {% else %}
-                <p><strong>Service:</strong> <em>Not configured</em></p>
+                <p><strong>{{ t('logs.service_label') }}</strong> <em>{{ t('logs.service_not_configured') }}</em></p>
                 {% endif %}
             </div>
         </div>
         <div class="logs-controls">
             <div class="logs-controls-row">
                 <div class="lines-selector">
-                    <label for="lines-select">Lines:</label>
+                    <label for="lines-select">{{ t('logs.lines_label') }}</label>
                     <select id="lines-select" onchange="updateLines()">
                         <option value="100" {% if lines == 100 %}selected{% endif %}>100</option>
                         <option value="500" {% if lines == 500 %}selected{% endif %}>500</option>
@@ -293,14 +294,14 @@
                         <option value="5000" {% if lines == 5000 %}selected{% endif %}>5,000</option>
                     </select>
                 </div>
-                <button class="btn-refresh-icon" onclick="refreshLogs()" title="Refresh logs">🔄</button>
+                <button class="btn-refresh-icon" onclick="refreshLogs()" title="{{ t('logs.refresh_title') }}">🔄</button>
                 <div class="auto-refresh">
                     <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()">
-                    <label for="auto-refresh">Auto-refresh</label>
+                    <label for="auto-refresh">{{ t('logs.auto_refresh') }}</label>
                 </div>
             </div>
             <div class="logs-controls-row">
-                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">← Back to Dashboard</a>
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">{{ t('logs.back_dashboard') }}</a>
             </div>
         </div>
     </div>
@@ -308,7 +309,7 @@
     <div class="logs-container">
         {% if error %}
         <div class="logs-error">
-            <h3>⚠️ Error Loading Logs</h3>
+            <h3>{{ t('logs.error_heading') }}</h3>
             <p>{{ error }}</p>
             {% if not service_name %}
             <p><strong>Note:</strong> To view logs, please configure a service name for this app in the Edit dialog.</p>
@@ -316,13 +317,13 @@
         </div>
         {% elif logs %}
         <div class="logs-content-wrapper" id="logs-wrapper">
-            <div id="loading-top" class="loading-indicator top" style="display: none;">Loading older logs...</div>
+            <div id="loading-top" class="loading-indicator top" style="display: none;">{{ t('logs.loading_older') }}</div>
             <div class="logs-content" id="logs-content">{{ logs }}</div>
-            <div id="loading-bottom" class="loading-indicator bottom" style="display: none;">Loading newer logs...</div>
+            <div id="loading-bottom" class="loading-indicator bottom" style="display: none;">{{ t('logs.loading_newer') }}</div>
         </div>
         {% else %}
         <div class="logs-empty">
-            <p>No logs available</p>
+            <p>{{ t('logs.no_logs') }}</p>
         </div>
         {% endif %}
     </div>

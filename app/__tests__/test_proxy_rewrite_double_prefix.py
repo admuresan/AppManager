@@ -6,6 +6,8 @@ causing URLs like /investmentcalculator/investmentcalculator/api/calculate.
 
 The issue was that window.__APP_MANAGER_ORIGINAL_FETCH was pointing to our override
 instead of the native fetch, creating a chain that caused double-rewriting.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import unittest
 from unittest.mock import Mock, patch, MagicMock

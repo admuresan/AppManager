@@ -143,8 +143,8 @@ After starting the app:
 
 - **Welcome Page**: http://localhost:5000
 - **Admin Login**: http://localhost:5000/admin/login
-  - Username: `LastTerminal`
-  - Password: `WhiteMage`
+  - Credentials are stored in `instance/admin_config.json` (not git-backed).
+  - On first run, set `APP_MANAGER_ADMIN_PASSWORD` (and optionally `APP_MANAGER_ADMIN_USERNAME`) before starting.
 
 ## Troubleshooting
 

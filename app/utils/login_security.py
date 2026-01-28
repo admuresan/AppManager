@@ -1,5 +1,7 @@
 """
-Login security utility for tracking and limiting failed login attempts
+Login security utility for tracking and limiting failed login attempts.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import json
 import os

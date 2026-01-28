@@ -1,5 +1,7 @@
 """
-AppManager - Gateway application for managing multiple Flask apps
+AppManager - Gateway application for managing multiple Flask apps.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 from flask import Flask
 from flask_login import LoginManager
@@ -16,8 +18,20 @@ def create_app():
     app = Flask(__name__)
     
     # Configuration
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+    # Security: never ship a hardcoded SECRET_KEY. Require env in production; generate ephemeral key in dev.
+    secret_key = os.environ.get("SECRET_KEY")
+    if not secret_key:
+        # Default to development unless explicitly set to production.
+        env = os.environ.get("FLASK_ENV", "development")
+        is_dev = env == "development" or os.environ.get("DEV_MODE", "").lower() in {"1", "true", "yes"}
+        if not is_dev:
+            raise RuntimeError("SECRET_KEY must be set via environment variable in production.")
+        secret_key = os.urandom(32).hex()
+    app.config["SECRET_KEY"] = secret_key
     app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB max file size
+    # Cookie isolation: multiple apps share the same domain, so cookie names must be unique per app.
+    app.config['SESSION_COOKIE_NAME'] = os.environ.get('SESSION_COOKIE_NAME', 'appmanager_session')
+    app.config['REMEMBER_COOKIE_NAME'] = os.environ.get('REMEMBER_COOKIE_NAME', 'appmanager_remember')
     # Server address for direct port links (defaults to localhost for development)
     # Set SERVER_ADDRESS environment variable to override (e.g., your-domain.com or IP address)
     app.config['SERVER_ADDRESS'] = os.environ.get('SERVER_ADDRESS', 'localhost')
@@ -131,12 +145,19 @@ def create_app():
         abort(404)
     
     # Register blueprints
-    # IMPORTANT: Register /blackgrid/ routes BEFORE proxy routes
-    # This ensures /blackgrid/ is handled by AppManager, not proxied
-    from app.routes import welcome, admin, proxy
+    from app.routes import welcome, admin, docs, proxy
     app.register_blueprint(welcome.bp)  # /blackgrid/
     app.register_blueprint(admin.bp)    # /blackgrid/admin/
-    app.register_blueprint(proxy.bp)    # /<app_slug>/ (catches everything else)
+    app.register_blueprint(docs.bp)     # /blackgrid/docs
+    # Proxy must be registered last (broad catch-all routes).
+    app.register_blueprint(proxy.bp)
+
+    # Inject text/content helper into templates.
+    from app.utils.content import t as _t
+
+    @app.context_processor
+    def inject_text():
+        return {"t": _t}
     
     # Import User model for login manager
     from app.models.user import User
@@ -150,7 +171,7 @@ def create_app():
         # Handle any edge cases gracefully
         try:
             return User.get_by_username(str(user_id))
-        except (ValueError, TypeError, AttributeError):
+        except (ValueError, TypeError, AttributeError, RuntimeError):
             return None
     
     @login_manager.unauthorized_handler

@@ -1,6 +1,8 @@
 """
-Traffic tracking utility for AppManager
-Tracks visits, unique visitors, geography, and per-app statistics
+Traffic tracking utility for AppManager.
+Tracks visits, unique visitors, geography, and per-app statistics.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import json
 import os

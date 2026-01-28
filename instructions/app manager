@@ -1,6 +1,6 @@
-the app manager requires log in, by default the admin account is LastTerminal and the password is WhiteMage (this should be in a local file that is used during deploy but thta file should not be git backed)
+the app manager requires log in. admin credentials must be stored in a local instance-level file (instance/admin_config.json) or provided via environment variables during first-time setup. this file must not be git backed.
 
-do not stro pasword as plaintext
+do not store passwords as plaintext (in repo or in config files). store only password hashes in instance/admin_config.json.
 
 once logged in they see a nicely formated list of currenty set up apps, each row has a ... at the end and one of the options is edit
 

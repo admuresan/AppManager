@@ -1,5 +1,7 @@
 """
-SSL certificate management for app ports
+SSL certificate management for app ports.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import subprocess
 import os

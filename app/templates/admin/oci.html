@@ -1,0 +1,259 @@
+{# IMPORTANT: Read `instructions/architecture` before making changes. #}
+{% extends "base.html" %}
+
+{% block title %}{{ t('oci.page_title') }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .oci-wrap { max-width: 1000px; margin: 0 auto; }
+  .oci-card {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 22px;
+    margin-top: 18px;
+  }
+  .oci-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .oci-grid .full { grid-column: 1 / -1; }
+  .oci-card h2 { margin: 0 0 12px 0; }
+  .oci-help { opacity: 0.85; font-size: 0.95em; line-height: 1.5; }
+  .oci-help code { background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 6px; }
+  .field label { display:block; font-size: 0.9em; opacity: 0.85; margin-bottom: 6px; }
+  .field input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.25);
+    color: #e0e0e0;
+    outline: none;
+  }
+  .row-actions { display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .btn { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: #e0e0e0; cursor: pointer; text-decoration: none; display:inline-block; }
+  .btn:hover { background: rgba(255,255,255,0.12); }
+  .btn-primary { background: rgba(102,126,234,0.35); border-color: rgba(102,126,234,0.6); }
+  .btn-primary:hover { background: rgba(102,126,234,0.45); }
+  .btn-secondary { background: rgba(255,255,255,0.06); }
+  .result { margin-top: 14px; padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.10); white-space: pre-wrap; }
+  .ok { border-color: rgba(78,201,176,0.45); }
+  .bad { border-color: rgba(244,135,113,0.45); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="oci-wrap">
+  <div style="margin-top: 10px;">
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">{{ t('oci.back_dashboard') }}</a>
+  </div>
+
+  <div class="oci-card">
+    <h2>{{ t('oci.heading_main') }}</h2>
+    <div class="oci-help">
+      {{ t('oci.help.intro') }}
+      {{ t('oci.help.needs_intro') }}
+      <ul style="margin: 10px 0 0 20px;">
+        <li><strong>{{ t('oci.help.needs_api_key') }}</strong> ({{ t('oci.help.needs_api_key_note') }})</li>
+        <li><strong>{{ t('oci.help.needs_compartment_vcn') }}</strong> {{ t('oci.help.needs_compartment_vcn_note') }}</li>
+      </ul>
+      <div style="margin-top: 10px;">
+        {{ t('oci.help.where_intro') }}
+        <ul style="margin: 10px 0 0 20px;">
+          <li>{{ t('oci.help.where_user') }}</li>
+          <li>{{ t('oci.help.where_tenancy') }}</li>
+          <li>{{ t('oci.help.where_region') }}</li>
+          <li>{{ t('oci.help.where_fingerprint') }}</li>
+          <li>{{ t('oci.help.where_compartment') }}</li>
+          <li>{{ t('oci.help.where_vcn') }}</li>
+        </ul>
+      </div>
+      <div style="margin-top: 10px;">
+        {{ t('oci.help.nsg_note') }}
+      </div>
+    </div>
+  </div>
+
+  <div class="oci-card">
+    <h2>{{ t('oci.heading_settings') }}</h2>
+    <div class="oci-grid">
+      <div class="field">
+        <label>{{ t('oci.fields.user_ocid') }}</label>
+        <input id="oci-user" placeholder="{{ t('oci.placeholders.user_ocid') }}" />
+      </div>
+      <div class="field">
+        <label>{{ t('oci.fields.tenancy_ocid') }}</label>
+        <input id="oci-tenancy" placeholder="{{ t('oci.placeholders.tenancy_ocid') }}" />
+      </div>
+      <div class="field">
+        <label>{{ t('oci.fields.region') }}</label>
+        <input id="oci-region" placeholder="{{ t('oci.placeholders.region') }}" />
+      </div>
+      <div class="field">
+        <label>{{ t('oci.fields.fingerprint') }}</label>
+        <input id="oci-fingerprint" placeholder="{{ t('oci.placeholders.fingerprint') }}" />
+      </div>
+      <div class="field full">
+        <label>{{ t('oci.fields.key_file_path') }}</label>
+        <input id="oci-keyfile" placeholder="{{ t('oci.placeholders.key_file_path') }}" />
+      </div>
+      <div class="field">
+        <label>{{ t('oci.fields.compartment_ocid') }}</label>
+        <input id="oci-compartment" placeholder="{{ t('oci.placeholders.compartment_ocid') }}" />
+      </div>
+      <div class="field">
+        <label>{{ t('oci.fields.vcn_ocid') }}</label>
+        <input id="oci-vcn" placeholder="{{ t('oci.placeholders.vcn_ocid') }}" />
+      </div>
+    </div>
+
+    <div class="row-actions">
+      <button class="btn btn-primary" onclick="saveOci()">{{ t('oci.actions.save') }}</button>
+      <button class="btn" onclick="testOci()">{{ t('oci.actions.test') }}</button>
+    </div>
+
+    <div id="oci-result" class="result" style="display:none;"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const els = {
+    user: document.getElementById('oci-user'),
+    tenancy: document.getElementById('oci-tenancy'),
+    region: document.getElementById('oci-region'),
+    fingerprint: document.getElementById('oci-fingerprint'),
+    keyfile: document.getElementById('oci-keyfile'),
+    compartment: document.getElementById('oci-compartment'),
+    vcn: document.getElementById('oci-vcn'),
+    result: document.getElementById('oci-result'),
+  };
+
+  function showResult(ok, text) {
+    els.result.style.display = 'block';
+    els.result.classList.remove('ok', 'bad');
+    els.result.classList.add(ok ? 'ok' : 'bad');
+    els.result.textContent = text;
+  }
+
+  async function loadOci() {
+    const res = await fetch('/blackgrid/admin/api/oci/config');
+    const data = await res.json();
+    if (!data.success) return;
+    const cfg = data.config || {};
+    els.user.value = cfg.user || '';
+    els.tenancy.value = cfg.tenancy || '';
+    els.region.value = cfg.region || '';
+    els.fingerprint.value = cfg.fingerprint || '';
+    els.keyfile.value = cfg.key_file || '';
+    els.compartment.value = cfg.compartment_id || '';
+    els.vcn.value = cfg.vcn_id || '';
+  }
+
+  async function saveOci() {
+    const payload = {
+      user: els.user.value.trim(),
+      tenancy: els.tenancy.value.trim(),
+      region: els.region.value.trim(),
+      fingerprint: els.fingerprint.value.trim(),
+      key_file: els.keyfile.value.trim(),
+      compartment_id: els.compartment.value.trim(),
+      vcn_id: els.vcn.value.trim(),
+    };
+    const res = await fetch('/blackgrid/admin/api/oci/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showResult(true, 'Saved OCI configuration.\n\nNext: click “Test OCI Access”.');
+    } else {
+      showResult(false, 'Save failed: ' + (data.error || 'unknown error'));
+    }
+  }
+
+  async function testOci() {
+    showResult(true, 'Testing OCI…');
+    const res = await fetch('/blackgrid/admin/api/oci/test', { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) {
+      showResult(false, 'OCI test failed: ' + (data.error || 'unknown error'));
+      return;
+    }
+    const lines = [];
+    lines.push('OCI Test Result');
+    lines.push('--------------');
+    lines.push('configured: ' + (data.oci_configured ? 'YES' : 'NO'));
+    if (data.config_source) lines.push('config_source: ' + data.config_source);
+    if (data.last_error) lines.push('last_error: ' + data.last_error);
+    lines.push('');
+
+    lines.push('Auth / Client');
+    lines.push('------------');
+    if (data.has_config !== undefined) lines.push('has_config: ' + String(data.has_config));
+    if (data.has_network_client !== undefined) lines.push('has_network_client: ' + String(data.has_network_client));
+    if (data.region) lines.push('region: ' + data.region);
+    if (data.key_file) lines.push('key_file: ' + data.key_file);
+    if (data.key_file_exists !== undefined) lines.push('key_file_exists: ' + String(data.key_file_exists));
+    lines.push('');
+
+    lines.push('Server Paths (this AppManager process)');
+    lines.push('-------------------------------');
+    if (data.process_user) lines.push('user: ' + data.process_user);
+    if (data.home_dir) lines.push('home_dir: ' + data.home_dir);
+    if (data.instance_path) lines.push('instance_path: ' + data.instance_path);
+    if (data.instance_cfg_path) lines.push('instance_cfg_path: ' + data.instance_cfg_path);
+    if (data.instance_cfg_exists !== undefined) lines.push('instance_cfg_exists: ' + String(data.instance_cfg_exists));
+    if (data.home_cfg_path) lines.push('home_cfg_path: ' + data.home_cfg_path);
+    if (data.home_cfg_exists !== undefined) lines.push('home_cfg_exists: ' + String(data.home_cfg_exists));
+    if (data.instance_cfg_summary) {
+      lines.push('');
+      lines.push('instance/oci_config.json summary');
+      lines.push('-------------------------------');
+      try {
+        const s = data.instance_cfg_summary;
+        if (s.error) lines.push('error: ' + s.error);
+        else {
+          lines.push('has_user: ' + String(s.has_user));
+          lines.push('has_tenancy: ' + String(s.has_tenancy));
+          lines.push('has_fingerprint: ' + String(s.has_fingerprint));
+          if (s.region) lines.push('region: ' + s.region);
+          if (s.key_file) lines.push('key_file: ' + s.key_file);
+          lines.push('has_compartment_id: ' + String(s.has_compartment_id));
+          lines.push('has_vcn_id: ' + String(s.has_vcn_id));
+        }
+      } catch (e) {}
+    }
+    lines.push('');
+
+    lines.push('Network Targets');
+    lines.push('---------------');
+    lines.push('compartment_id: ' + (data.compartment_id || '(missing)'));
+    lines.push('vcn_id: ' + (data.vcn_id || '(missing)'));
+    if (data.security_lists_count !== undefined && data.security_lists_count !== null) {
+      lines.push('security_lists_found: ' + data.security_lists_count);
+    }
+    if (data.default_security_list_id) lines.push('default_security_list_id: ' + data.default_security_list_id);
+    lines.push('');
+
+    if (data.missing && Array.isArray(data.missing) && data.missing.length) {
+      lines.push('Missing / Needs Fix');
+      lines.push('-------------------');
+      data.missing.forEach(m => lines.push('- ' + m));
+      lines.push('');
+    }
+
+    if (data.note) {
+      lines.push('Note');
+      lines.push('----');
+      lines.push(data.note);
+    }
+
+    // IMPORTANT: use real newlines (not the literal "\\n")
+    showResult(Boolean(data.oci_configured), lines.join('\n'));
+  }
+
+  loadOci();
+</script>
+{% endblock %}
+

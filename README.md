@@ -18,7 +18,7 @@ AppManager runs on standard HTTP/HTTPS ports (80/443) and provides:
 - **Seamless Experience**: Interact with selected apps as if they were running on the main ports
 
 ### Admin Features
-- **Authentication**: Secure login system (default: LastTerminal/WhiteMage)
+- **Authentication**: Secure login system (credentials stored in `instance/admin_config.json`, not git-backed)
 - **App Management**: CRUD operations for managing apps
   - Add new apps with name, port, optional logo, and service name
   - Edit existing app configurations
@@ -91,11 +91,14 @@ The app automatically detects the environment based on `FLASK_ENV` or defaults t
 
 ## Configuration
 
-### Default Admin Credentials
-- Username: `LastTerminal`
-- Password: `WhiteMage`
+### Admin Credentials
+Admin credentials are stored in `instance/admin_config.json` (not git-backed).
 
-**Important**: These credentials are stored in `instance/admin_config.json` (not git-backed). Change them after first deployment.
+For first-time setup (when `instance/admin_config.json` does not exist), initialize credentials via environment variables:
+
+- `APP_MANAGER_ADMIN_USERNAME` (defaults to `admin` if omitted)
+- `APP_MANAGER_ADMIN_PASSWORD` (required for first-time setup)  
+  or `APP_MANAGER_ADMIN_PASSWORD_HASH`
 
 ### App Configuration
 App configurations are stored in `instance/apps_config.json` (not git-backed). This file persists across restarts and deployments.

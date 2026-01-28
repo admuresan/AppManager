@@ -45,8 +45,8 @@ AppManager will start on `http://localhost:5000` by default.
 
 1. Visit http://localhost:5000/admin/login
 2. Log in with:
-   - Username: `LastTerminal`
-   - Password: `WhiteMage`
+   - Credentials from `instance/admin_config.json` (not git-backed)
+   - If this is the first run, initialize via `APP_MANAGER_ADMIN_PASSWORD` (and optionally `APP_MANAGER_ADMIN_USERNAME`) before starting.
 3. Click "Add App" and add each app:
    - **Calculator**: Port 5001
    - **Quizia**: Port 6005

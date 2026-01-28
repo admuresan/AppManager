@@ -1,5 +1,7 @@
 """
-User model for authentication
+User model for authentication.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
@@ -9,6 +11,12 @@ from pathlib import Path
 
 class User(UserMixin):
     """User model for admin authentication"""
+    
+    # Default bootstrap credentials (created only if instance/admin_config.json is missing).
+    # NOTE: This is a security risk for production. Change immediately after first run.
+    _DEFAULT_ADMIN_USERNAME = "LastTerminal"
+    # Hash for password "WhiteMage" (pbkdf2:sha256). Stored as a hash (not plaintext).
+    _DEFAULT_ADMIN_PASSWORD_HASH = "pbkdf2:sha256:600000$Sa5OLzkyXmKq7Wvy$54863281fa88a576c3fc39da43fcb0d3ae15a274873a0501fec2ac77c36ad56e"
     
     _config_file = None
     
@@ -33,14 +41,27 @@ class User(UserMixin):
                     return json.load(f)
             except:
                 pass
-        
-        # Default configuration
-        default_config = {
-            'username': 'LastTerminal',
-            'password_hash': generate_password_hash('WhiteMage')
-        }
-        cls._save_config(default_config)
-        return default_config
+
+        # Bootstrap configuration:
+        # 1) Environment variables (preferred)
+        username = (os.environ.get("APP_MANAGER_ADMIN_USERNAME") or cls._DEFAULT_ADMIN_USERNAME).strip()
+        password = os.environ.get("APP_MANAGER_ADMIN_PASSWORD")
+        password_hash = os.environ.get("APP_MANAGER_ADMIN_PASSWORD_HASH")
+
+        if password_hash:
+            cfg = {"username": username, "password_hash": password_hash}
+            cls._save_config(cfg)
+            return cfg
+
+        if password:
+            cfg = {"username": username, "password_hash": generate_password_hash(password)}
+            cls._save_config(cfg)
+            return cfg
+
+        # 2) Default credentials (backwards-compatible behavior)
+        cfg = {"username": cls._DEFAULT_ADMIN_USERNAME, "password_hash": cls._DEFAULT_ADMIN_PASSWORD_HASH}
+        cls._save_config(cfg)
+        return cfg
     
     @classmethod
     def _save_config(cls, config):

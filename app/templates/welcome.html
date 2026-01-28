@@ -1,6 +1,7 @@
+{# IMPORTANT: Read `instructions/architecture` before making changes. #}
 {% extends "base.html" %}
 
-{% block title %}Welcome - AppManager{% endblock %}
+{% block title %}{{ t('welcome.page_title') }}{% endblock %}
 
 {% block content %}
 <!-- Manager Icon in Top Right -->
@@ -10,8 +11,8 @@
 
 <div class="welcome-page">
     <header class="welcome-header">
-        <h1>Welcome to AppManager</h1>
-        <p>Select an application to get started</p>
+        <h1>{{ t('welcome.header_title') }}</h1>
+        <p>{{ t('welcome.header_subtitle') }}</p>
     </header>
     
     <div class="apps-grid">
@@ -29,13 +30,18 @@
                 {% endif %}
                 <h3>{{ app.name }}</h3>
             </a>
+            <a href="{{ url_for('docs.index', app_id=app.id) }}" class="app-doc-link">{{ t('welcome.docs_link') }}</a>
         </div>
         {% endfor %}
         
         {% if not apps %}
         <div class="no-apps">
-            <p>No apps configured yet.</p>
-            <p><a href="{{ url_for('admin.dashboard') }}">Login to Admin</a> to add apps.</p>
+            <p>{{ t('welcome.no_apps_title') }}</p>
+            <p>
+                {{ t('welcome.no_apps_cta_prefix') }}
+                <a href="{{ url_for('admin.dashboard') }}">{{ t('welcome.no_apps_cta_link') }}</a>
+                {{ t('welcome.no_apps_cta_suffix') }}
+            </p>
         </div>
         {% endif %}
     </div>

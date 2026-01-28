@@ -21,13 +21,17 @@ This guide is for developers and deployment agents writing scripts to deploy app
 
 ## Overview
 
-AppManager is a gateway application that manages and proxies requests to multiple Flask applications running on a server. When deploying an app for AppManager to manage, you need to:
+AppManager is a launcher/dashboard for multiple web apps. **Apps are accessed directly by port**:
 
-1. Deploy your application to run on a specific internal port
-2. Ensure the app is listening and accessible on localhost
-3. Optionally set up a systemd service for process management
+- `http://blackgrid.ddns.net:{port}`
+
+When deploying an app for AppManager to manage, you need to:
+
+1. Deploy your application to run on a specific port
+2. Ensure the app is listening and reachable (usually bind `0.0.0.0`)
+3. Optionally set up a systemd service so AppManager can start/restart it
 4. Register the app with AppManager through the admin dashboard
-5. AppManager will automatically handle firewall rules and SSL/HTTPS setup
+5. AppManager can automatically handle firewall rules (UFW + OCI) when you register the app
 
 ---
 
@@ -46,7 +50,7 @@ AppManager is a gateway application that manages and proxies requests to multipl
 Your application must:
 - Be a web application (Flask, Django, FastAPI, or any HTTP server)
 - Listen on a specific port (not 80, 443, or 5000 - these are reserved)
-- Be accessible on `localhost` or `127.0.0.1`
+- Be accessible externally (typically bind `0.0.0.0`)
 - Respond to HTTP requests on the configured port
 - Be running **before** registering with AppManager
 
@@ -56,7 +60,7 @@ Your application must:
 
 ### Port Binding
 
-Your app **must** bind to `localhost` (127.0.0.1) or `0.0.0.0`. AppManager will proxy requests to your app, so it doesn't need to be publicly accessible.
+Your app should bind to `0.0.0.0` so that `blackgrid.ddns.net:{port}` works directly.
 
 **Example Flask app:**
 ```python
@@ -69,8 +73,8 @@ def hello():
     return "Hello from my app!"
 
 if __name__ == '__main__':
-    # Bind to localhost - AppManager will handle external access
-    app.run(host='127.0.0.1', port=5001, debug=False)
+    # Bind publicly for direct port access
+    app.run(host='0.0.0.0', port=5001, debug=False)
 ```
 
 **Example with environment variable:**
@@ -82,7 +86,7 @@ app = Flask(__name__)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    app.run(host='127.0.0.1', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
 ```
 
 ### Health Check Endpoint (Recommended)
@@ -273,10 +277,9 @@ Use a consistent naming pattern:
 
 ### Automatic Configuration
 
-AppManager **automatically configures firewall rules** when you register an app:
-- **UFW (Uncomplicated Firewall)** rules are added automatically
+AppManager can automatically configure firewall rules when you register an app:
+- **UFW (Uncomplicated Firewall)** rules are added automatically (Linux servers)
 - **OCI Security Lists** are updated if OCI is configured
-- Both HTTP and HTTPS ports are opened
 
 ### Manual Configuration (If Needed)
 
@@ -302,12 +305,9 @@ sudo ufw status
 
 ## SSL/HTTPS Configuration
 
-### Automatic SSL Setup
+### SSL/HTTPS
 
-AppManager **automatically sets up SSL/HTTPS** for registered apps:
-- Uses Let's Encrypt certificates
-- HTTPS is available on port `{app_port} + 10000`
-- Example: App on port 5001 → HTTPS on port 15001
+The current port-based model is **HTTP direct to the app port** (`http://domain:port`). If you later want HTTPS per app, you can put a reverse proxy (nginx/Caddy) in front of each port or use the legacy nginx-per-port mapping.
 
 ### Requirements
 
@@ -318,10 +318,9 @@ AppManager **automatically sets up SSL/HTTPS** for registered apps:
 ### Accessing Your App
 
 After registration:
-- **HTTP**: `http://server-domain:5001` (internal, proxied through AppManager)
-- **HTTPS**: `https://server-domain:15001` (direct, with SSL)
+- **HTTP**: `http://blackgrid.ddns.net:5001`
 
-**Note**: Users typically access apps through AppManager's welcome page, which handles routing automatically.
+**Note**: Users typically click apps from AppManager’s welcome page, which redirects to the port.
 
 ---
 
@@ -343,8 +342,8 @@ Before registering, ensure:
    ```
 
 2. **Log in** with admin credentials:
-   - Default username: `LastTerminal`
-   - Default password: `WhiteMage`
+   - Admin credentials are stored in `instance/admin_config.json` (not git-backed)
+   - For first-time setup, initialize via `APP_MANAGER_ADMIN_PASSWORD` (and optionally `APP_MANAGER_ADMIN_USERNAME`) before starting
    - ⚠️ **Change these after first login!**
 
 3. **Click "Add App"** button on the dashboard
@@ -373,10 +372,9 @@ Before registering, ensure:
 
 1. ✅ AppManager **tests** if the port is listening
 2. ✅ If port is not listening, registration **fails** with error message
-3. ✅ Firewall rules are **automatically configured** (UFW + OCI)
-4. ✅ SSL/HTTPS is **automatically set up** (if Let's Encrypt is configured)
-5. ✅ App configuration is **saved** to `instance/apps_config.json`
-6. ✅ App appears on the **welcome page** immediately
+3. ✅ Firewall rules are **automatically configured** (UFW + OCI) when available
+4. ✅ App configuration is **saved** to `instance/apps_config.json`
+5. ✅ App appears on the **welcome page** immediately
 
 ### Registration Errors
 
@@ -415,13 +413,11 @@ sudo systemctl status myapp.service
 ### 2. Test Through AppManager
 
 1. **Test Port**: In admin dashboard, click "⋯" → "Test"
-   - Verifies port is listening
-   - Shows connection status
+   - Verifies local and public direct-port access
 
 2. **Access via Welcome Page**:
-   - Go to `http://your-server/`
-   - Your app should appear in the list
-   - Click the app button to access it
+   - Go to `/blackgrid/`
+   - Click the app button to open `http://domain:{port}`
 
 3. **Test Restart** (if service name configured):
    - In admin dashboard, click "⋯" → "Restart"
@@ -696,15 +692,7 @@ sudo systemctl restart myapp.service
 
 ## Upstream Proxy Configuration (Optional)
 
-If you have an upstream proxy (e.g., nginx) in front of AppManager that handles SSL termination or additional routing, you may need to configure it to set the appropriate X-Forwarded-* headers.
-
-### AppManager Routes
-
-AppManager's own routes are prefixed with `/blackgrid`:
-- Welcome page: `/blackgrid/`
-- Admin panel: `/blackgrid/admin/`
-
-If your upstream proxy forwards requests to AppManager, it should set the `X-Forwarded-Prefix` header for AppManager routes:
+If you place a proxy (nginx/Caddy) in front of **AppManager itself** (not the apps), it should forward `/blackgrid/*` to AppManager and preserve the Host/Proto headers as needed.
 
 **Example nginx configuration:**
 
@@ -720,26 +708,15 @@ location /blackgrid {
     proxy_set_header X-Forwarded-Prefix /blackgrid;  # Important for AppManager routes
 }
 
-# Forward all other routes (individual apps) to AppManager
-location / {
-    proxy_pass http://localhost:5000;  # AppManager port
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Port $server_port;
-    # Note: X-Forwarded-Prefix is set by AppManager for individual apps
-}
+# Do NOT forward / to AppManager for apps in the domain:port model.
+# Users should access apps directly via http://domain:port
 ```
 
-### Request Flow
+### Request Flow (domain:port)
 
-1. **Client** → `https://blackgrid.ddns.net/{app_name}/path`
-2. **Upstream Proxy (nginx)** → Forwards to AppManager on port 80/443 or internal port
-3. **AppManager** → Proxies to `localhost:{port}/path` with X-Forwarded-* headers
-4. **Individual App** → Processes request using ProxyFix middleware
-
-**Note:** If AppManager is directly listening on ports 80/443 (no upstream proxy), no additional configuration is needed. AppManager handles all routing internally.
+1. **Client** → `/blackgrid/` (AppManager welcome page)
+2. **AppManager** → Starts app if needed + opens port + redirects
+3. **Client** → `http://blackgrid.ddns.net:{port}` (direct to the app)
 
 ---
 

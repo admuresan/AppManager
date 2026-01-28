@@ -1,5 +1,7 @@
 """
-Gunicorn configuration for AppManager production deployment
+Gunicorn configuration for AppManager production deployment.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import multiprocessing
 import os

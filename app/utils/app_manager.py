@@ -1,5 +1,7 @@
 """
-Utility functions for managing apps
+Utility functions for managing apps.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import socket
 import subprocess
@@ -7,6 +9,14 @@ import psutil
 import os
 import re
 import platform
+
+# NOTE: Port configuration utilities were extracted to keep this module focused.
+# Re-exported here for backward compatibility with existing imports.
+from app.utils.port_configuration import (  # noqa: E402
+    configure_firewall_port,
+    configure_firewall_port_detailed,
+    is_server_environment,
+)
 
 def test_app_port(port):
     """Test if an app is listening on a specific port"""
@@ -529,122 +539,9 @@ def get_active_ports_and_services():
     
     return active_ports
 
-def is_server_environment():
-    """Check if running on a server (not localhost/development)"""
-    # Check if we're in development mode
-    if os.environ.get('FLASK_ENV') == 'development':
-        return False
-    
-    # Check if running on Windows (no ufw support)
-    if platform.system() != 'Linux':
-        return False
-    
-    # Check if ufw is available
-    try:
-        result = subprocess.run(['which', 'ufw'], capture_output=True, timeout=2)
-        if result.returncode != 0:
-            return False
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-    
-    return True
-
-def configure_firewall_port(port, action='allow'):
-    """
-    Configure firewall rules for a port using ufw and OCI security lists.
-    
-    Args:
-        port: Port number to configure
-        action: 'allow' to open port, 'delete' to remove rule
-    
-    Returns:
-        tuple: (success: bool, message: str)
-    """
-    messages = []
-    ufw_success = True
-    oci_success = True
-    
-    # Configure local firewall (ufw) if on server
-    if is_server_environment():
-        try:
-            if action == 'allow':
-                # Check if rule already exists
-                result = subprocess.run(
-                    ['sudo', 'ufw', 'status', 'numbered'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                
-                # Check if port is already allowed
-                if str(port) in result.stdout:
-                    messages.append(f"Port {port} is already allowed in ufw")
-                else:
-                    # Add firewall rule
-                    result = subprocess.run(
-                        ['sudo', 'ufw', 'allow', f'{port}/tcp'],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
-                    )
-                    
-                    if result.returncode == 0:
-                        messages.append(f"UFW rule added: ufw allow {port}/tcp")
-                    else:
-                        ufw_success = False
-                        messages.append(f"Failed to add UFW rule: {result.stderr}")
-            
-            elif action == 'delete':
-                # Remove firewall rule (if exists)
-                result = subprocess.run(
-                    ['sudo', 'ufw', 'delete', 'allow', f'{port}/tcp'],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                
-                if result.returncode == 0:
-                    messages.append(f"UFW rule removed: ufw delete allow {port}/tcp")
-                else:
-                    # Rule might not exist, which is okay
-                    messages.append(f"UFW rule for port {port} not found (may not exist)")
-            
-            else:
-                ufw_success = False
-                messages.append(f"Unknown action: {action}")
-        
-        except subprocess.TimeoutExpired:
-            ufw_success = False
-            messages.append("UFW command timed out")
-        except FileNotFoundError:
-            ufw_success = False
-            messages.append("ufw command not found (not installed?)")
-        except Exception as e:
-            ufw_success = False
-            messages.append(f"Error configuring UFW: {str(e)}")
-    else:
-        messages.append("Skipped UFW (not on server environment)")
-    
-    # Configure OCI security list if configured
-    try:
-        from app.utils.oci_manager import configure_oci_port, is_oci_configured
-        
-        if is_oci_configured():
-            oci_success, oci_message = configure_oci_port(port, action)
-            messages.append(f"OCI: {oci_message}")
-        else:
-            messages.append("OCI not configured, skipping OCI security list update")
-    except ImportError:
-        messages.append("OCI SDK not available, skipping OCI security list update")
-    except Exception as e:
-        oci_success = False
-        messages.append(f"OCI error: {str(e)}")
-    
-    # Return success if at least one method succeeded
-    overall_success = ufw_success or oci_success
-    combined_message = "; ".join(messages)
-    
-    return overall_success, combined_message
+#
+# Port configuration helpers live in `app.utils.port_configuration`.
+# (See imports near the top of this file.)
 
 def get_app_logs(service_name, lines=500, since=None, until=None):
     """

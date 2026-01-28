@@ -6,13 +6,22 @@
    - This file is NOT git-backed (excluded in .gitignore)
    - Ensure the key has correct permissions: `chmod 600 ssh/ssh-key-2025-12-26.key`
 
-2. **Server Requirements**:
+2. **OCI API Key (for automatic OCI Security List port rules)**:
+   - AppManager updates OCI **Security List ingress rules** via the OCI API (not via SSH).
+   - During deploy, `deploy.sh` will install your OCI API private key on the server at:
+     - `~/.oci/oci_api_key.pem` (for the `ubuntu` user that runs `appmanager`)
+   - Provide the key in one of these ways:
+     - Place the private key in `oci_ssh/` as a `.pem` file (public-key files like `*_public.pem` are ignored), OR
+     - Set `OCI_PRIVATE_KEY_FILE=/path/to/oci_api_key.pem` when running deploy.
+   - If you do **not** provide the key, AppManager will still deploy, but OCI port automation may be disabled until the key is present server-side.
+
+3. **Server Requirements**:
    - Ubuntu/Debian Linux server
    - Python 3.8+ installed
    - sudo/root access
    - Port 80 available (or change PORT in deploy.sh)
 
-3. **Local Requirements**:
+4. **Local Requirements**:
    - bash shell
    - tar command
    - ssh/scp commands

@@ -1,0 +1,151 @@
+# Architecture Guidelines for FeatureRequestor
+
+## MANDATORY: Read This File Before Making Any Changes
+Every file in this codebase MUST include a comment at the top directing developers/agents to read this architecture file before making changes.
+
+---
+
+## Core Principles
+
+### 1. File Structure and Modularity
+- **Single Responsibility**: Each file must serve only one specific aspect of a page or functionality
+- **Narrow Scope**: Keep files focused and small. If a file exceeds ~300 lines, break it down
+- **Modular Design**: Everything should be modular and reusable
+- **Decomposition Rule**: Any section with multiple subsections or complex logic MUST be broken into smaller files
+  - Parent files should only import/include child modules
+  - Each module handles one specific concern
+- **Code Singularity**: Do not duplicate code logic in multiple places. Move functions that need to be reused to utility files and import them. If needed, parametrize or build functions on top of existing utility functions, but do not simply duplicate them. Before adding new functions, search the codebase for functions with the same purpose that can be altered or reused directly
+    - Functions should have clear and good documentation that is updated each time they are modified
+- **Location**: All code and run files (excepting launch and deploy code) should be in an `app/` folder
+
+### 2. Technology Stack
+- **Backend**: Python with Flask framework
+- **Frontend**: JavaScript, HTML, and CSS
+- **Computation**: Push all computation, business logic, and data processing to the backend
+- **Frontend Role**: Frontend should primarily handle presentation and user interaction
+
+### 3. Content Management
+- **NO Inline Text**: Never hardcode text content directly in HTML or CSS
+- **Parameterization**: All text blocks must be in separate files that can be parameterized and served properly
+- **Templates**: Use template files or configuration files for all user-facing text
+
+### 4. Security
+- **NO Plaintext Secrets**: Never store passwords, API keys, tokens, or other sensitive information in plaintext
+- **Environment Variables**: Use environment variables or secure configuration management for secrets
+- **Input Validation**: Always validate and sanitize user inputs on both frontend and backend
+- **HTTPS**: Use HTTPS for all production deployments
+- **SQL Injection Prevention**: Use parameterized queries, never string concatenation for SQL
+
+### 5. File Organization
+- **Directory Structure**: Organize files by feature/domain, not by file type
+  - Example: `features/feature-requests/` contains all related files (models, routes, templates, styles)
+- **Naming Conventions**:
+  - Python files: `snake_case.py`
+  - JavaScript files: `camelCase.js`
+  - CSS files: `kebab-case.css`
+  - HTML templates: `kebab-case.html`
+- **Separation of Concerns**: Keep models, views, controllers, and utilities in separate files
+
+### 6. Code Quality
+- **DRY Principle**: Don't Repeat Yourself - extract common functionality into reusable functions/modules
+- **Error Handling**: Always implement proper error handling with try-catch blocks and meaningful error messages
+- **Logging**: Use structured logging for debugging and monitoring (avoid print statements in production)
+- **Comments**: Write clear comments explaining "why", not "what" (code should be self-documenting)
+
+### 7. API Design
+- **RESTful Principles**: Follow REST conventions for API endpoints
+- **Status Codes**: Use appropriate HTTP status codes (200, 201, 400, 401, 404, 500, etc.)
+- **Response Format**: Use consistent JSON response format across all endpoints
+
+### 8. Database Practices
+- **Migrations**: Use database migrations for schema changes
+- **Connection Pooling**: Implement connection pooling for database connections
+- **Transactions**: Use transactions for operations that must succeed or fail together
+- **Indexes**: Add appropriate indexes for frequently queried fields
+
+### 9. Frontend Best Practices
+- **Progressive Enhancement**: Build core functionality first, enhance with JavaScript
+- **Accessibility**: Follow WCAG guidelines for accessibility (ARIA labels, semantic HTML)
+- **Performance**: Minimize HTTP requests, use lazy loading, optimize images
+- **Browser Compatibility**: Test in multiple browsers, use polyfills when necessary
+- **State Management**: Keep frontend state minimal, fetch fresh data from backend when needed
+
+
+### 10. Dependencies
+- **Dependency Management**: Use requirements.txt (Python) to track dependencies
+- **Version Pinning**: Pin dependency versions for production stability
+- **Regular Updates**: Regularly update dependencies for security patches
+- **Minimal Dependencies**: Only include necessary dependencies
+
+### 11. Documentation
+- **README**: Maintain an up-to-date README with setup instructions
+- **API Documentation**: Document all API endpoints with request/response examples
+- **Code Comments**: Add docstrings to functions and classes explaining their purpose and parameters
+- **Architecture Decisions**: Document significant architectural decisions
+
+### 12. Performance
+- **Caching**: Implement caching for frequently accessed data (Redis, memcached, or in-memory)
+- **Database Queries**: Optimize database queries, avoid N+1 query problems
+- **Asset Optimization**: Minify and compress CSS/JavaScript for production
+- **Lazy Loading**: Load resources on-demand when possible
+
+### 13. Deployment and DevOps
+- **Environment Variables**: Use environment variables for configuration
+- **Health Checks**: Implement health check endpoints for monitoring
+- **Graceful Shutdown**: Handle shutdown signals gracefully
+- **Logging**: Centralize logging for production monitoring
+- **Backup Strategy**: Implement regular backups for databases
+
+### 14. Launching and DEV v Prod
+- **Main Launch**: The app should launch via an `app.py` file that stands up the app at a port defined in `ssh/deploy_config.json`
+    - The `app.py` file should be at the root of the project
+    - The port should be read from `deploy_config.json` (key: `server_port`)
+- **Dev Mode**:
+    - When in dev mode, the app should run on localhost with auto-reload enabled so that changes to the app code update immediately
+    - Use Flask's debug mode or a development server with hot-reload capability
+    - Set via environment variable (e.g., `FLASK_ENV=development` or `DEV_MODE=true`)
+- **Prod Mode**:
+    - When launching in prod, the app should run in production mode without auto-reload
+    - Use a production WSGI server (e.g., Gunicorn, uWSGI)
+    - Disable debug mode and verbose error messages
+- **Prod Deploy**: There should be a deploy script (e.g., `deploy.sh` or `deploy.py`) which deploys the app for production
+    - The script should deploy to the IP defined in `ssh/deploy_config.json` (key: `prod_server_ip`)
+    - The prod server is an Ubuntu server
+    - SSH keys for deploying are in the `/ssh` folder
+    - The deploy script should have two modes:
+        - **Regular mode** (default): Updates code but does NOT overwrite any configs, data, or instance-level files that are created
+        - **Full mode** (`--full` flag): Scraps everything in the folder and makes a fresh deploy (use with caution)
+    - The deploy script should be runnable with no further input from the user (non-interactive)
+    - The deploy script should handle SSH connection, file transfer, dependency installation, and service restart
+
+---
+
+## Enforcement Rules for AI Agents
+
+When implementing features or making changes:
+1. **Always read this file first** before starting any work
+2. **Check file size** - if approaching 300 lines, refactor into smaller modules
+3. **Verify modularity** - ensure each file has a single, clear purpose
+4. **Search for existing code** - before adding new functions, search the codebase for similar functionality that can be reused
+5. **Validate security** - never commit secrets, always use environment variables
+6. **Follow naming conventions** - be consistent with existing codebase patterns
+7. **Add error handling** - don't leave code paths without error handling
+8. **Update documentation** - keep README and comments current with changes
+10. **Check app folder location** - ensure all application code is in the `app/` folder (except launch/deploy scripts)
+
+---
+
+## Quick Reference Checklist
+
+Before committing any change, verify:
+- [ ] File has comment directing to read this architecture file
+- [ ] File is focused on single responsibility
+- [ ] No code duplication - searched for existing functions before adding new ones
+- [ ] Code is in `app/` folder (if applicable)
+- [ ] No inline text in HTML/CSS
+- [ ] No plaintext secrets
+- [ ] Computation/logic is in backend
+- [ ] Error handling is implemented
+- [ ] Appropriate logging is added
+- [ ] Code follows naming conventions
+- [ ] Dependencies are properly managed

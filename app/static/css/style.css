@@ -1,3 +1,4 @@
+/* IMPORTANT: Read `instructions/architecture` before making changes. */
 /* Global Styles */
 * {
     margin: 0;
@@ -14,7 +15,7 @@ body {
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 0 auto;
     position: relative;
 }
@@ -148,6 +149,18 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 15px;
+}
+
+.app-doc-link {
+    display: inline-block;
+    margin-top: 12px;
+    font-size: 0.95em;
+    color: #8bb4ff;
+    text-decoration: none;
+}
+
+.app-doc-link:hover {
+    text-decoration: underline;
 }
 
 .app-logo {
@@ -385,6 +398,15 @@ body {
 .header-actions {
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Make dashboard header buttons fit nicely (no multi-line labels) */
+.header-actions .btn {
+    padding: 10px 14px;
+    font-size: 0.95em;
+    white-space: nowrap;
+    line-height: 1.1;
 }
 
 .apps-list-header {
@@ -974,6 +996,11 @@ body {
         flex-direction: column;
         align-items: flex-start;
         gap: 15px;
+    }
+
+    .header-actions {
+        width: 100%;
+        flex-wrap: wrap;
     }
     
     .app-row-content {

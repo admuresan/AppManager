@@ -59,19 +59,14 @@ oci iam tenancy get
 
 ### 4. Fingerprint
 
-**This is auto-generated during deployment** from your SSH public key.
+**This is auto-generated during deployment** from your OCI API private key (`~/.oci/oci_api_key.pem`) if present.
 
 If you need to regenerate it manually:
 ```bash
-ssh-keygen -lf ssh/ssh-key-2025-12-26.key.pub
+openssl rsa -pubout -outform DER -in ~/.oci/oci_api_key.pem | openssl md5 -c
 ```
 
-The fingerprint is the second field (e.g., `SHA256:...` or `MD5:...`)
-
-**Note:** For OCI API keys, you typically need the MD5 fingerprint. To get it:
-```bash
-openssl rsa -pubout -outform DER -in ssh/ssh-key-2025-12-26.key | openssl md5 -c
-```
+The fingerprint is the value after `= ` (e.g., `aa:bb:cc:...`).
 
 Or if you've already uploaded the key to OCI:
 1. Go to **Identity** → **Users** → Select your user

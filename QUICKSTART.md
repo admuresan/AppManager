@@ -40,14 +40,14 @@
 3. **Access the application**:
 - Welcome page: http://localhost:5000
 - Admin login: http://localhost:5000/admin/login
-  - Username: `LastTerminal`
-  - Password: `WhiteMage`
+  - Credentials are stored in `instance/admin_config.json` (not git-backed).
+  - If this is your first run, set `APP_MANAGER_ADMIN_PASSWORD` (and optionally `APP_MANAGER_ADMIN_USERNAME`) before starting.
 
 **Note**: The app defaults to port 5000 for local development. On the server, set `PORT=80` or `PORT=443` for production use.
 
 ## First Steps
 
-1. **Log in to admin panel** using the default credentials
+1. **Log in to admin panel** using the credentials in `instance/admin_config.json`
 2. **Add your first app**:
    - Click "Add App"
    - Enter app name (e.g., "Calculator")

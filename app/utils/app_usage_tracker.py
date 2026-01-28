@@ -1,5 +1,7 @@
 """
-App usage tracker for monitoring app access and managing auto-shutdown
+App usage tracker for monitoring app access and managing auto-shutdown.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import json
 import time

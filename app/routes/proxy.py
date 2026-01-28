@@ -1,4 +1,14 @@
 """
+Compatibility wrapper for the proxy blueprint and helpers.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
+"""
+
+from app.features.proxy.blueprint import bp  # noqa: F401
+from app.features.proxy.services.script_injection import rewrite_urls_in_content  # noqa: F401
+from app.features.proxy.services.urls import rewrite_url  # noqa: F401
+
+"""
 Reverse proxy routes for forwarding requests to internal apps
 
 This proxy implementation is designed to work with applications using ProxyFix middleware
@@ -32,6 +42,49 @@ logger = logging.getLogger(__name__)
 
 # Check if we're in production (reduce debug logging for performance)
 IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('FLASK_DEBUG') == '0'
+
+
+def _bg_trace_enabled() -> bool:
+    """
+    Enable verbose tracing when the client requests it.
+    - via ?__bg_trace=1
+    - or via cookie __bg_trace=1
+    """
+    try:
+        if request.args.get('__bg_trace') == '1':
+            return True
+        if request.cookies.get('__bg_trace') == '1':
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _infer_expected_prefixed_url_for_unknown_slug(app_slug: str, path: str) -> str | None:
+    """
+    When we receive a request like /quizmaster/login (app_slug='quizmaster', path='login')
+    but no such app exists, try to infer that the user was *inside* some app (via Referer),
+    and the missing prefix should have been: /<ref_app>/<app_slug>/<path>
+    """
+    try:
+        ref = request.referrer
+        if not ref:
+            return None
+        parsed = urlparse(ref)
+        ref_path = parsed.path or ''
+        # e.g. /quizia/quizmaster
+        segments = [s for s in ref_path.split('/') if s]
+        if not segments:
+            return None
+        ref_app = segments[0]
+        if not AppConfig.get_by_slug(ref_app):
+            return None
+        # expected: /quizia/quizmaster/login
+        if path:
+            return f'/{ref_app}/{app_slug}/{path}'
+        return f'/{ref_app}/{app_slug}'
+    except Exception:
+        return None
 
 # Create a session with connection pooling for better performance
 _session = requests.Session()
@@ -343,11 +396,12 @@ def rewrite_urls_in_content(content, app_slug, manager_domain, content_type=''):
             # Fallback: return content without script injection
             return content_str.encode('utf-8')
         
-        # Insert script after <head> tag
+        # Insert script IMMEDIATELY after <head> tag (before any other scripts)
         # IMPORTANT: Check if script is already present to prevent double-injection
         if '__APP_MANAGER_REWRITE_LOADED' not in content_str:
             head_pattern = re.compile(r'(<head[^>]*>)', re.IGNORECASE)
             if head_pattern.search(content_str):
+                # Insert script immediately after <head> tag to ensure it runs first
                 content_str = head_pattern.sub(rf'\1\n{rewrite_script}', content_str, count=1)
             else:
                 html_pattern = re.compile(r'(<html[^>]*>)', re.IGNORECASE)
@@ -372,6 +426,16 @@ def proxy_path(app_slug, path):
     app_name = app_slug
     
     try:
+        trace = _bg_trace_enabled()
+        if trace:
+            logger.info(
+                "[BG TRACE] proxy.enter input=%s app_slug=%s path=%s qs=%s referer=%s",
+                request.full_path,
+                app_slug,
+                path,
+                request.query_string.decode(errors='ignore') if request.query_string else "",
+                request.referrer or "",
+            )
         # Special case: /blackgrid/ is AppManager, don't proxy
         if app_slug == MANAGER_PREFIX:
             from flask import abort
@@ -391,6 +455,23 @@ def proxy_path(app_slug, path):
             return f"Error loading app configuration: {str(e)}", 500
         
         if not app_config:
+            expected = _infer_expected_prefixed_url_for_unknown_slug(app_slug, path)
+            if expected:
+                logger.warning(
+                    "[BG TRACE] proxy.unknown_app input=%s expected=%s actual=%s reason=%s",
+                    request.full_path,
+                    expected,
+                    request.path,
+                    "app_slug not registered (likely missing prefix)",
+                )
+            else:
+                logger.warning(
+                    "[BG TRACE] proxy.unknown_app input=%s expected=%s actual=%s reason=%s",
+                    request.full_path,
+                    None,
+                    request.path,
+                    "app_slug not registered",
+                )
             logger.warning(f"App not found for slug: {app_slug} (path was: {path})")
             from flask import render_template
             return render_template('app_not_found.html'), 404
@@ -537,6 +618,18 @@ def proxy_path(app_slug, path):
                         query_pairs.append((key, value))
                 clean_query = urlencode(query_pairs)
                 target_url += f"?{clean_query}"
+
+        if trace:
+            expected_public = f"/{app_slug}/{path}" if path else f"/{app_slug}"
+            actual_public = request.path
+            logger.info(
+                "[BG TRACE] proxy.url_map input=%s expected_public=%s actual_public=%s expected_target=%s actual_target=%s",
+                request.full_path,
+                expected_public,
+                actual_public,
+                f"http://localhost:{app_port}/{path}",
+                target_url,
+            )
         
         # Get manager domain for headers
         manager_domain = get_manager_domain()

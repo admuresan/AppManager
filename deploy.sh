@@ -11,6 +11,12 @@ SERVER_USER="ubuntu"  # Server username
 DEPLOY_DIR="/opt/appmanager"
 SSH_KEY_DIR="ssh"
 SSH_KEY_FILE="ssh-key-2025-12-26.key"  # Private key (not git-backed)
+# OCI API key handling
+# - AppManager's OCI SDK expects an API key on the SERVER at: ~/.oci/oci_api_key.pem
+# - We keep the private key OUT of the app tarball and upload it separately if present.
+OCI_KEY_DIR="oci_ssh"
+OCI_PRIVATE_KEY_FILE="${OCI_PRIVATE_KEY_FILE:-}"
+REQUIRE_OCI="${REQUIRE_OCI:-false}"  # if true, fail deploy when OCI key missing
 VENV_NAME="AMvenv"
 SERVICE_NAME="appmanager"
 APP_PORT="5000"  # AppManager will run on port 5000, nginx will proxy to it
@@ -25,6 +31,19 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}AppManager Deployment Script${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+
+# Auto-detect a local OCI private key if one wasn't provided.
+# We look for a private key in oci_ssh/*.pem and skip obvious public-key files.
+if [ -z "$OCI_PRIVATE_KEY_FILE" ]; then
+    for f in "$OCI_KEY_DIR"/*.pem; do
+        [ -f "$f" ] || continue
+        case "$f" in
+            *_public.pem|*public*.pem) continue ;;
+        esac
+        OCI_PRIVATE_KEY_FILE="$f"
+        break
+    done
+fi
 
 # Check if SSH key exists
 if [ ! -f "$SSH_KEY_DIR/$SSH_KEY_FILE" ]; then
@@ -92,6 +111,8 @@ tar --exclude='AMvenv' \
     --exclude='*.log' \
     --exclude='.env' \
     --exclude='ssh/*.key' \
+    --exclude='oci_ssh/*.pem' \
+    --exclude='oci_ssh/*.key' \
     --exclude='backups' \
     -czf "$TEMP_DIR/appmanager.tar.gz" .
 
@@ -177,6 +198,41 @@ ENDSSH
 echo -e "${GREEN}✓ Virtual environment ready${NC}"
 echo ""
 
+# Upload OCI API private key (separately) if present locally.
+if [ -n "$OCI_PRIVATE_KEY_FILE" ] && [ -f "$OCI_PRIVATE_KEY_FILE" ]; then
+    echo -e "${YELLOW}[6.4/10] Uploading OCI API private key...${NC}"
+    $SCP_CMD "$OCI_PRIVATE_KEY_FILE" ${SERVER_USER}@${SERVER_IP}:/tmp/oci_api_key.pem
+    $SSH_CMD ${SERVER_USER}@${SERVER_IP} << 'ENDSSH'
+        set -e
+        mkdir -p ~/.oci
+        # Backup existing key if different
+        if [ -f ~/.oci/oci_api_key.pem ]; then
+            if command -v sha256sum >/dev/null 2>&1; then
+                old_sum=$(sha256sum ~/.oci/oci_api_key.pem | awk '{print $1}')
+                new_sum=$(sha256sum /tmp/oci_api_key.pem | awk '{print $1}')
+                if [ "$old_sum" != "$new_sum" ]; then
+                    mv ~/.oci/oci_api_key.pem ~/.oci/oci_api_key.pem.bak.$(date +%Y%m%d_%H%M%S)
+                fi
+            else
+                mv ~/.oci/oci_api_key.pem ~/.oci/oci_api_key.pem.bak.$(date +%Y%m%d_%H%M%S)
+            fi
+        fi
+        mv /tmp/oci_api_key.pem ~/.oci/oci_api_key.pem
+        chmod 600 ~/.oci/oci_api_key.pem
+ENDSSH
+    echo -e "${GREEN}✓ OCI API key installed at ~/.oci/oci_api_key.pem${NC}"
+    echo ""
+else
+    if [ "$REQUIRE_OCI" = "true" ]; then
+        echo -e "${RED}ERROR: OCI API private key (.pem) not found locally.${NC}"
+        echo "Set OCI_PRIVATE_KEY_FILE to the path of your OCI API private key, or place it in ${OCI_KEY_DIR}/"
+        exit 1
+    fi
+    echo -e "${YELLOW}Warning: No OCI API private key (.pem) found locally.${NC}"
+    echo "OCI security list updates may be disabled until ~/.oci/oci_api_key.pem is present on the server."
+    echo ""
+fi
+
 # Set up OCI configuration
 echo -e "${YELLOW}[6.5/10] Setting up OCI configuration...${NC}"
 
@@ -194,30 +250,26 @@ $SSH_CMD ${SERVER_USER}@${SERVER_IP} << ENDSSH
     mkdir -p ~/.oci
     mkdir -p instance
     
-    # Check if SSH private key exists (using the key file name from deployment)
-    SSH_KEY_NAME="ssh-key-2025-12-26.key"
-    if [ -f "ssh/\${SSH_KEY_NAME}" ]; then
-        echo "Found SSH private key, setting up OCI API key..."
-        
-        # Copy private key to .oci directory as API key
-        cp ssh/\${SSH_KEY_NAME} ~/.oci/oci_api_key.pem
-        chmod 600 ~/.oci/oci_api_key.pem
-        
-        # Generate fingerprint from public key
+    # OCI API key must exist at ~/.oci/oci_api_key.pem for AppManager to manage Security Lists.
+    # If it's not present, we can still write placeholder config, but OCI features will be disabled.
+    if [ -f ~/.oci/oci_api_key.pem ]; then
+        echo "Found OCI API private key at ~/.oci/oci_api_key.pem"
+
+        # Generate MD5 fingerprint for OCI (required by OCI API Keys)
         FINGERPRINT=""
-        if [ -f "ssh/\${SSH_KEY_NAME}.pub" ]; then
-            # Extract fingerprint from public key (for RSA keys)
-            FINGERPRINT=\$(ssh-keygen -lf ssh/\${SSH_KEY_NAME}.pub 2>/dev/null | awk '{print \$2}' || echo "")
-            
-            if [ -n "\$FINGERPRINT" ]; then
-                echo "API key fingerprint: \$FINGERPRINT"
-                # Export for Python script
-                export FINGERPRINT
-            else
-                echo "Warning: Could not generate fingerprint from public key"
-            fi
+        if command -v openssl >/dev/null 2>&1; then
+            # Output format: MD5(stdin)= aa:bb:...
+            FINGERPRINT=$(openssl rsa -pubout -outform DER -in ~/.oci/oci_api_key.pem 2>/dev/null | openssl md5 -c 2>/dev/null | awk -F'= ' '{print $2}' | tr -d '\r\n')
+        fi
+        if [ -z "$FINGERPRINT" ] && command -v ssh-keygen >/dev/null 2>&1; then
+            # Fallback (may be SHA256 depending on ssh-keygen defaults)
+            FINGERPRINT=$(ssh-keygen -lf ~/.oci/oci_api_key.pem 2>/dev/null | awk '{print $2}' || echo "")
+        fi
+        if [ -n "$FINGERPRINT" ]; then
+            echo "API key fingerprint: $FINGERPRINT"
+            export FINGERPRINT
         else
-            echo "Warning: Public key not found, cannot generate fingerprint"
+            echo "Warning: Could not generate fingerprint automatically. You may need to set it via admin UI."
         fi
         
         # Check if OCID_config.json exists and load values
@@ -251,8 +303,29 @@ $SSH_CMD ${SERVER_USER}@${SERVER_IP} << ENDSSH
             echo "OCID_config.json not found, using placeholders"
         fi
         
-        # Create OCI config in instance folder (JSON format) using Python
-        python3 << 'PYTHONSCRIPT' > instance/oci_config.json
+        # If instance/oci_config.json already exists and is fully configured, preserve it.
+        # Otherwise, (re)generate it with whatever info we have.
+        NEED_WRITE=true
+        if [ -f instance/oci_config.json ]; then
+            python3 - <<'PYCHECK'
+import json, sys
+try:
+    cfg = json.load(open("instance/oci_config.json","r"))
+    # Consider it "configured" if these required fields exist and have no placeholders.
+    required = ["user","tenancy","region","fingerprint","compartment_id","vcn_id","key_file"]
+    ok = all(cfg.get(k) for k in required) and not any("PLACEHOLDER" in str(cfg.get(k,"")) for k in required)
+    sys.exit(0 if ok else 1)
+except Exception:
+    sys.exit(1)
+PYCHECK
+            if [ $? -eq 0 ]; then
+                NEED_WRITE=false
+            fi
+        fi
+
+        if [ "$NEED_WRITE" = "true" ]; then
+            # Create OCI config in instance folder (JSON format) using Python
+            python3 << 'PYTHONSCRIPT' > instance/oci_config.json
 import json
 import os
 
@@ -291,6 +364,9 @@ config = {
 
 print(json.dumps(config, indent=4))
 PYTHONSCRIPT
+        else
+            echo "Preserving existing instance/oci_config.json (already configured)"
+        fi
         
         # Create standard OCI config file format
         cat > ~/.oci/config << 'OCICONFIGFILE'
@@ -352,7 +428,7 @@ OCICONFIGFILE
             echo "    - VCN_OCID_PLACEHOLDER: Your VCN OCID"
         fi
     else
-        echo "SSH private key not found, skipping OCI setup"
+        echo "OCI API private key not found at ~/.oci/oci_api_key.pem, skipping OCI setup"
         echo "To set up OCI later:"
         echo "  1. Copy your OCI API private key to ~/.oci/oci_api_key.pem"
         echo "  2. Create ~/.oci/config with your OCI credentials"
@@ -987,8 +1063,9 @@ echo -e "  ${YELLOW}(Also accessible via IP: https://${SERVER_IP})${NC}"
 echo ""
 
 echo -e "${YELLOW}Admin Credentials:${NC}"
-echo "  Username: LastTerminal"
-echo "  Password: WhiteMage"
+echo "  Credentials are stored in instance/admin_config.json on the server."
+echo "  For first-time setup, set APP_MANAGER_ADMIN_USERNAME and APP_MANAGER_ADMIN_PASSWORD"
+echo "  (or APP_MANAGER_ADMIN_PASSWORD_HASH) in the service environment before starting."
 echo ""
 
 if [ "$HTTPS_WORKING" = "true" ] && [ "$CERT_TYPE" = "letsencrypt" ]; then

@@ -1,6 +1,7 @@
+{# IMPORTANT: Read `instructions/architecture` before making changes. #}
 {% extends "base.html" %}
 
-{% block title %}Admin Dashboard - AppManager{% endblock %}
+{% block title %}{{ t('admin_dashboard.page_title') }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -422,20 +423,21 @@
 {% block content %}
 <div class="admin-dashboard">
     <header class="dashboard-header">
-        <h1>App Manager Dashboard</h1>
+        <h1>{{ t('admin_dashboard.heading') }}</h1>
         <div class="header-actions">
-            <a href="{{ url_for('welcome.index') }}" class="btn btn-secondary">← Back to Welcome</a>
-            <button onclick="showConfigModal(); return false;" class="btn btn-secondary">⚙️ Config</button>
-            <button onclick="restartAppManager(); return false;" class="btn btn-secondary">Restart App Manager</button>
-            <a href="{{ url_for('admin.logout') }}" class="btn btn-secondary">Logout</a>
+            <a href="{{ url_for('welcome.index') }}" class="btn btn-secondary">{{ t('admin_dashboard.back_welcome') }}</a>
+            <button onclick="showConfigModal(); return false;" class="btn btn-secondary">{{ t('admin_dashboard.config') }}</button>
+            <a href="{{ url_for('admin.oci_config') }}" class="btn btn-secondary">{{ t('admin_dashboard.oci_config') }}</a>
+            <button onclick="restartAppManager(); return false;" class="btn btn-secondary">{{ t('admin_dashboard.restart_app_manager') }}</button>
+            <a href="{{ url_for('admin.logout') }}" class="btn btn-secondary">{{ t('admin_dashboard.logout') }}</a>
         </div>
     </header>
     
     <!-- Configured Applications -->
     <div class="apps-list">
         <div class="apps-list-header">
-            <h2>Configured Applications</h2>
-            <button class="btn btn-primary" onclick="showAddModal()">+ Add App</button>
+            <h2>{{ t('admin_dashboard.configured_apps') }}</h2>
+            <button class="btn btn-primary" onclick="showAddModal()">{{ t('admin_dashboard.add_app') }}</button>
         </div>
         
         <div id="apps-container" class="apps-container">
@@ -449,7 +451,7 @@
                                    data-app-id="{{ app.id }}" 
                                    {% if app.get('serve_app', True) %}checked{% endif %}
                                    onchange="toggleServeApp('{{ app.id }}', this.checked)">
-                            <span>Serve App</span>
+                            <span>{{ t('admin_dashboard.serve_app') }}</span>
                         </label>
                     </div>
                     <div class="app-info">
@@ -460,19 +462,20 @@
                         {% endif %}
                         <div class="app-details">
                             <h3>{{ app.name }}</h3>
-                            <p>Port: {{ app.port }} | Service: {{ app.get('service_name', 'N/A') }}</p>
+                            <p>{{ t('admin_dashboard.app_details', port=app.port, service=app.get('service_name', t('admin_dashboard.na'))) }}</p>
                         </div>
                     </div>
                     <div class="app-actions">
                         <div class="dropdown">
                             <button class="btn-icon" onclick="toggleDropdown('{{ app.id }}')">⋯</button>
                             <div id="dropdown-{{ app.id }}" class="dropdown-menu">
-                                <a href="#" onclick="editApp('{{ app.id }}'); return false;">Edit</a>
-                                <a href="#" onclick="testApp('{{ app.id }}'); return false;">Test</a>
-                                <a href="#" onclick="fixSSL('{{ app.id }}'); return false;">Fix SSL</a>
-                                <a href="#" onclick="restartApp('{{ app.id }}'); return false;">Restart</a>
-                                <a href="{{ url_for('admin.view_logs', app_id=app.id) }}" target="_blank">See Logs</a>
-                                <a href="#" onclick="deleteApp('{{ app.id }}'); return false;" class="danger">Delete</a>
+                                <a href="#" onclick="editApp('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.edit') }}</a>
+                                <a href="#" onclick="testApp('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.test') }}</a>
+                                <a href="#" onclick="fixAppConfig('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.fix_configuration') }}</a>
+                                <a href="#" onclick="fixSSL('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.fix_ssl') }}</a>
+                                <a href="#" onclick="restartApp('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.restart') }}</a>
+                                <a href="{{ url_for('admin.view_logs', app_id=app.id) }}" target="_blank">{{ t('admin_dashboard.menu.see_logs') }}</a>
+                                <a href="#" onclick="deleteApp('{{ app.id }}'); return false;" class="danger">{{ t('admin_dashboard.menu.delete') }}</a>
                             </div>
                         </div>
                     </div>
@@ -482,7 +485,7 @@
             
             {% if not apps %}
             <div class="no-apps">
-                <p>No apps configured. Click "Add App" to get started.</p>
+                <p>{{ t('admin_dashboard.no_apps') }}</p>
             </div>
             {% endif %}
         </div>
@@ -490,35 +493,35 @@
     
     <!-- Admin Tools Section -->
     <div style="margin-top: 40px; margin-bottom: 20px;">
-        <h2 style="color: #d4d4d4; font-size: 1.8em; font-weight: 600; border-bottom: 2px solid #667eea; padding-bottom: 10px;">Admin Tools</h2>
+        <h2 style="color: #d4d4d4; font-size: 1.8em; font-weight: 600; border-bottom: 2px solid #667eea; padding-bottom: 10px;">{{ t('admin_dashboard.admin_tools') }}</h2>
     </div>
     
     <!-- Ports Console -->
     <div class="ports-console">
         <div class="console-header collapsed" onclick="toggleConsole('ports')">
-            <h2><span class="chevron">▶</span>Active Ports Console</h2>
+            <h2><span class="chevron">▶</span>{{ t('admin_dashboard.active_ports_console') }}</h2>
             <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshPortsConsole()">🔄 Refresh</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshPortsConsole()">{{ t('admin_dashboard.refresh') }}</button>
             </div>
         </div>
         <div id="ports-console-content" class="console-content collapsed">
-            <p style="color: #808080; text-align: center; padding: 20px;">Loading active ports...</p>
+            <p style="color: #808080; text-align: center; padding: 20px;">{{ t('admin_dashboard.loading_active_ports') }}</p>
         </div>
     </div>
     
     <!-- Terminal Console -->
     <div class="terminal-console">
         <div class="console-header collapsed" onclick="toggleConsole('terminal')">
-            <h2><span class="chevron">▶</span>Server Terminal</h2>
+            <h2><span class="chevron">▶</span>{{ t('admin_dashboard.server_terminal') }}</h2>
             <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); clearTerminal()">🗑️ Clear</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); clearTerminal()">{{ t('admin_dashboard.clear') }}</button>
             </div>
         </div>
         <div id="terminal-content" class="terminal-content collapsed">
             <div id="terminal-output" class="terminal-output"></div>
             <div class="terminal-input-line">
                 <span class="terminal-prompt" id="terminal-prompt-display">~$</span>
-                <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false" placeholder="Type a command and press Enter...">
+                <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false" placeholder="{{ t('admin_dashboard.terminal_placeholder') }}">
             </div>
         </div>
     </div>
@@ -1656,7 +1659,7 @@ async function testApp(appId) {
         html += '</div>';
         html += '</div>';
         
-        // HTTP test
+        // HTTP test (local / server address)
         html += '<div class="test-section">';
         html += '<h3>HTTP Test (Port ' + result.port + ')</h3>';
         const httpIsSuccessful = result.http.accessible && result.http.successful;
@@ -1679,6 +1682,32 @@ async function testApp(appId) {
         html += '</div>';
         html += '<div class="test-url"><strong>URL:</strong> <code>' + result.http.url + '</code></div>';
         html += '</div>';
+
+        // Public HTTP test (domain:port users click)
+        if (result.public_http) {
+            html += '<div class="test-section">';
+            html += '<h3>Public HTTP Test (' + (result.public_http.host || 'domain') + ':' + result.port + ')</h3>';
+            const publicHttpSuccessful = result.public_http.accessible && result.public_http.successful;
+            html += '<div class="test-result ' + (publicHttpSuccessful ? 'success' : 'error') + '">';
+            if (result.public_http.accessible) {
+                const status = typeof result.public_http.status === 'number' ? 'HTTP ' + result.public_http.status : result.public_http.status;
+                if (result.public_http.successful) {
+                    html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
+                } else {
+                    html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
+                    if (typeof result.public_http.status === 'number' && result.public_http.status === 404) {
+                        html += '<div class="test-warning">⚠ Resource not found (404) - App may be running but route returned 404</div>';
+                    } else if (typeof result.public_http.status === 'number' && result.public_http.status >= 500) {
+                        html += '<div class="test-warning">⚠ Server error (' + result.public_http.status + ') - App is returning an error</div>';
+                    }
+                }
+            } else {
+                html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.public_http.status + '</span>';
+            }
+            html += '</div>';
+            html += '<div class="test-url"><strong>URL:</strong> <code>' + result.public_http.url + '</code></div>';
+            html += '</div>';
+        }
         
         // HTTPS test
         html += '<div class="test-section">';
@@ -1735,57 +1764,7 @@ async function testApp(appId) {
         }
         html += '</div>';
         
-        // Masked Path Test (HTTP)
-        if (result.masked_path && result.masked_path.http) {
-            html += '<div class="test-section">';
-            html += '<h3>Masked Path Test - HTTP (/' + result.app_slug + '/)</h3>';
-            const maskedHttpSuccessful = result.masked_path.http.accessible && result.masked_path.http.successful;
-            html += '<div class="test-result ' + (maskedHttpSuccessful ? 'success' : 'error') + '">';
-            if (result.masked_path.http.accessible) {
-                const status = typeof result.masked_path.http.status === 'number' ? 'HTTP ' + result.masked_path.http.status : result.masked_path.http.status;
-                if (result.masked_path.http.successful) {
-                    html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
-                } else {
-                    html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
-                    if (typeof result.masked_path.http.status === 'number' && result.masked_path.http.status === 404) {
-                        html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
-                    } else if (typeof result.masked_path.http.status === 'number' && result.masked_path.http.status >= 500) {
-                        html += '<div class="test-warning">⚠ Server error (' + result.masked_path.http.status + ') - App is returning an error</div>';
-                    }
-                }
-            } else {
-                html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.masked_path.http.status + '</span>';
-            }
-            html += '</div>';
-            html += '<div class="test-url"><strong>URL:</strong> <code>' + result.masked_path.http.url + '</code></div>';
-            html += '</div>';
-        }
-        
-        // Masked Path Test (HTTPS)
-        if (result.masked_path && result.masked_path.https) {
-            html += '<div class="test-section">';
-            html += '<h3>Masked Path Test - HTTPS (/' + result.app_slug + '/)</h3>';
-            const maskedHttpsSuccessful = result.masked_path.https.accessible && result.masked_path.https.successful;
-            html += '<div class="test-result ' + (maskedHttpsSuccessful ? 'success' : 'error') + '">';
-            if (result.masked_path.https.accessible) {
-                const status = typeof result.masked_path.https.status === 'number' ? 'HTTP ' + result.masked_path.https.status : result.masked_path.https.status;
-                if (result.masked_path.https.successful) {
-                    html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
-                } else {
-                    html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
-                    if (typeof result.masked_path.https.status === 'number' && result.masked_path.https.status === 404) {
-                        html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
-                    } else if (typeof result.masked_path.https.status === 'number' && result.masked_path.https.status >= 500) {
-                        html += '<div class="test-warning">⚠ Server error (' + result.masked_path.https.status + ') - App is returning an error</div>';
-                    }
-                }
-            } else {
-                html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.masked_path.https.status + '</span>';
-            }
-            html += '</div>';
-            html += '<div class="test-url"><strong>URL:</strong> <code>' + result.masked_path.https.url + '</code></div>';
-            html += '</div>';
-        }
+        // Masked-path proxy tests removed (new routing model is domain:port)
         
         html += '</div>';
         
@@ -1796,12 +1775,10 @@ async function testApp(appId) {
     }
 }
 
-// Close modal when clicking outside
-document.getElementById('test-results-modal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeTestResultsModal();
-    }
-});
+{% include 'admin/js/fixPortConfiguration.js' %}
+
+// NOTE: Do not close this modal on outside click.
+// It should only close via the "X" button (see `closeTestResultsModal()`).
 
 async function fixSSL(appId) {
     if (!confirm('This will recreate the SSL certificate and nginx configuration for this app.\n\nThis ensures HTTPS works properly with proper signatures.\n\nContinue?')) {

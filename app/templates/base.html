@@ -1,9 +1,10 @@
+{# IMPORTANT: Read `instructions/architecture` before making changes. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}AppManager{% endblock %}</title>
+    <title>{% block title %}{{ t('base.title_default') }}{% endblock %}</title>
     <link rel="icon" type="image/png" href="{{ url_for('welcome.media_file', filename='BlackGrid.png') }}">
     <link rel="shortcut icon" type="image/png" href="{{ url_for('welcome.media_file', filename='BlackGrid.png') }}">
     <link rel="apple-touch-icon" href="{{ url_for('welcome.media_file', filename='BlackGrid.png') }}">

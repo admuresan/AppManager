@@ -1,20 +1,43 @@
-# Configuring Your App for AppManager Proxy
+# Configuring Your App for AppManager (Direct Port Access)
 
-This guide explains how to configure your application to work properly when proxied by AppManager. AppManager uses a reverse proxy that forwards requests from `https://domain.com/appname/path` to `http://localhost:PORT/path`, and your app needs to be configured to handle this correctly.
+AppManager no longer proxies apps behind `/{app_name}` paths. Instead, each managed app is accessed directly via:
 
-## Overview
+- `http://blackgrid.ddns.net:{port}`
 
-When AppManager proxies requests to your app, it:
-- Rewrites URLs from `domain.com/appname/path` → `localhost:PORT/path`
-- Sets X-Forwarded-* headers to inform your app about the original request
-- Handles WebSocket upgrades
-- Manages SSL/HTTPS termination
+AppManager’s job is to **start/stop apps**, **ensure ports are open** (UFW + OCI), and **redirect users to the correct port**.
 
-Your app must use **ProxyFix middleware** to read these headers and generate correct URLs.
+## What your app must do
+
+### 1) Bind publicly for direct access
+
+Your app must listen on a port that is reachable from the internet:
+
+```python
+app.run(host="0.0.0.0", port=6003, debug=False)
+```
+
+### 2) Isolate cookies (critical)
+
+All apps share the same domain (`blackgrid.ddns.net`). Cookies are **shared across ports**, so multiple Flask apps will collide unless cookie names are unique.
+
+Set at least:
+
+- `SESSION_COOKIE_NAME` (and if you use Flask-Login “remember me”: `REMEMBER_COOKIE_NAME`)
+
+Example:
+
+```python
+app.config["SESSION_COOKIE_NAME"] = "myapp_session"
+app.config["REMEMBER_COOKIE_NAME"] = "myapp_remember"
+```
+
+### 3) ProxyFix is optional
+
+If you are not behind a reverse proxy that sets `X-Forwarded-*` headers, `ProxyFix` is not required (it becomes a no-op). You may keep it for compatibility, but consider disabling it unless you explicitly trust proxy headers.
 
 ---
 
-## Step 1: Install ProxyFix Middleware
+## (Optional) ProxyFix Middleware (only if you are behind a proxy)
 
 ### For Flask Applications
 
@@ -38,7 +61,7 @@ werkzeug>=2.0.0
 
 ---
 
-## Step 2: Configure ProxyFix Middleware
+## (Optional) Configure ProxyFix Middleware
 
 ### Flask/Werkzeug Configuration
 
@@ -306,7 +329,7 @@ Before deploying, verify:
 
 ---
 
-## Step 8: Register with AppManager
+## Register with AppManager
 
 After configuring your app:
 
@@ -316,7 +339,7 @@ After configuring your app:
    - **Name**: Display name (will be converted to URL slug)
    - **Port**: The port your app is listening on
    - **Service Name**: Optional systemd service name
-4. **Test access** via `https://domain.com/appname/`
+4. **Test access** via `http://blackgrid.ddns.net:{port}`
 
 ---
 
@@ -394,7 +417,7 @@ If you encounter issues:
 2. Review AppManager logs for proxy errors
 3. Verify your app is listening on the correct port
 4. Test direct access: `http://localhost:PORT` (should work)
-5. Test proxied access: `https://domain.com/appname/` (should work with ProxyFix)
+5. Test external access: `http://blackgrid.ddns.net:{port}`
 
 For more information, see the AppManager documentation or contact your system administrator.
 

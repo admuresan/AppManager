@@ -1,5 +1,7 @@
 """
-App configuration model for managing registered apps
+App configuration model for managing registered apps.
+
+IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import json
 import os

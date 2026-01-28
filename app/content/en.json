@@ -1,0 +1,140 @@
+{
+  "base": {
+    "title_default": "AppManager"
+  },
+  "welcome": {
+    "page_title": "Welcome - AppManager",
+    "header_title": "Welcome to AppManager",
+    "header_subtitle": "Select an application to get started",
+    "docs_link": "View documentation",
+    "no_apps_title": "No apps configured yet.",
+    "no_apps_cta_prefix": "",
+    "no_apps_cta_link": "Login to Admin",
+    "no_apps_cta_suffix": "to add apps."
+  },
+  "proxy": {
+    "loading": {
+      "title": "Starting {app_name}...",
+      "headline": "Starting {app_name}...",
+      "body": "Please wait while we bring the app online.",
+      "subtle": "This page will refresh automatically."
+    }
+  },
+  "errors": {
+    "app_not_found": {
+      "page_title": "App Not Found - AppManager",
+      "title": "App Not Found",
+      "body": "The application you're looking for is not available or has been disabled.",
+      "cta": "Return to Main Page"
+    }
+  },
+  "admin_login": {
+    "page_title": "Admin Login - AppManager",
+    "icon_title": "Back to Welcome",
+    "title": "AppManager Admin",
+    "subtitle": "Please log in to manage applications",
+    "username_label": "Username",
+    "password_label": "Password",
+    "login_button": "Login",
+    "back_link": "← Back to Welcome"
+  },
+  "docs": {
+    "page_title": "Documentation - AppManager",
+    "back": "← Back",
+    "heading": "Documentation",
+    "managed_app_label": "Managed app",
+    "markdown_files_heading": "Markdown files",
+    "files_empty": "No markdown files found for this app.",
+    "select_prompt": "Select an app and a markdown file to view documentation."
+  },
+  "oci": {
+    "page_title": "OCI Configuration - AppManager",
+    "back_dashboard": "← Back to Dashboard",
+    "heading_main": "OCI Configuration",
+    "heading_settings": "Settings",
+    "help": {
+      "intro": "AppManager can open Oracle Cloud (OCI) ports automatically by updating your VCN Security List ingress rules.",
+      "needs_intro": "To do that it needs:",
+      "needs_api_key": "API key auth",
+      "needs_api_key_note": "(already handled by your server’s ~/.oci/config and key file)",
+      "needs_compartment_vcn": "Compartment OCID and VCN OCID",
+      "needs_compartment_vcn_note": "so it can find the correct security list",
+      "where_intro": "Where to find these values:",
+      "where_user": "User OCID: OCI Console → User Settings",
+      "where_tenancy": "Tenancy OCID: OCI Console → Tenancy Details",
+      "where_region": "Region: top-right region selector in OCI Console",
+      "where_fingerprint": "API key fingerprint: OCI Console → User → API Keys",
+      "where_compartment": "Compartment OCID: OCI Console → Identity → Compartments",
+      "where_vcn": "VCN OCID: OCI Console → Networking → Virtual Cloud Networks",
+      "nsg_note": "Note: If your instance uses a Network Security Group (NSG), you may also need NSG ingress rules."
+    },
+    "fields": {
+      "user_ocid": "User OCID",
+      "tenancy_ocid": "Tenancy OCID",
+      "region": "Region",
+      "fingerprint": "Fingerprint",
+      "key_file_path": "Key file path",
+      "compartment_ocid": "Compartment OCID",
+      "vcn_ocid": "VCN OCID"
+    },
+    "placeholders": {
+      "user_ocid": "ocid1.user.oc1..xxxx",
+      "tenancy_ocid": "ocid1.tenancy.oc1..xxxx",
+      "region": "ca-toronto-1",
+      "fingerprint": "aa:bb:cc:...",
+      "key_file_path": "~/.oci/oci_api_key.pem",
+      "compartment_ocid": "ocid1.compartment.oc1..xxxx",
+      "vcn_ocid": "ocid1.vcn.oc1..xxxx"
+    },
+    "actions": {
+      "save": "Save",
+      "test": "Test OCI Access"
+    }
+  },
+  "logs": {
+    "page_title": "Logs - {app_name} - AppManager",
+    "icon_title": "Back to Dashboard",
+    "service_label": "Service:",
+    "service_not_configured": "Not configured",
+    "lines_label": "Lines:",
+    "refresh_title": "Refresh logs",
+    "auto_refresh": "Auto-refresh",
+    "back_dashboard": "← Back to Dashboard",
+    "error_heading": "⚠️ Error Loading Logs",
+    "loading_older": "Loading older logs...",
+    "loading_newer": "Loading newer logs...",
+    "no_logs": "No logs available"
+  },
+  "admin_dashboard": {
+    "page_title": "Admin Dashboard - AppManager",
+    "heading": "App Manager Dashboard",
+    "back_welcome": "← Back to Welcome",
+    "config": "⚙️ Config",
+    "oci_config": "OCI Config",
+    "restart_app_manager": "Restart App Manager",
+    "logout": "Logout",
+    "configured_apps": "Configured Applications",
+    "add_app": "+ Add App",
+    "serve_app": "Serve App",
+    "na": "N/A",
+    "app_details": "Port: {port} | Service: {service}",
+    "menu": {
+      "edit": "Edit",
+      "test": "Test",
+      "fix_configuration": "Fix Port Configuration",
+      "fix_ssl": "Fix SSL",
+      "restart": "Restart",
+      "see_logs": "See Logs",
+      "delete": "Delete"
+    },
+    "no_apps": "No apps configured. Click \"Add App\" to get started.",
+    "admin_tools": "Admin Tools",
+    "active_ports_console": "Active Ports Console",
+    "refresh": "🔄 Refresh",
+    "loading_active_ports": "Loading active ports...",
+    "server_terminal": "Server Terminal",
+    "clear": "🗑️ Clear",
+    "terminal_placeholder": "Type a command and press Enter..."
+  }
+}
+
