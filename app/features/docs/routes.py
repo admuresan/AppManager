@@ -99,7 +99,9 @@ def _list_markdown_files(root: Path) -> list[str]:
         dirnames[:] = pruned
 
         for fn in filenames:
-            if not fn.lower().endswith(".md"):
+            # Include all .md files (case-insensitive), including README.md
+            fn_lower = fn.lower()
+            if not fn_lower.endswith(".md"):
                 continue
             try:
                 rel = (base / fn).relative_to(root)
@@ -107,6 +109,7 @@ def _list_markdown_files(root: Path) -> list[str]:
             except Exception:
                 continue
 
+    # Sort with README.md files first (case-insensitive)
     files.sort(key=lambda s: (s.lower() != "readme.md", s.lower()))
     return files
 

@@ -7,6 +7,7 @@ IMPORTANT: Read `instructions/architecture` before making changes.
 import json
 import os
 import hashlib
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
@@ -448,30 +449,60 @@ def get_traffic_stats(instance_path, days=30, include_local=True):
             'apps': {}
         }
         
-        # Per-app statistics
-        for app_name, app_data in data['apps'].items():
-            # Filter visits for this app in the period
-            app_visits = [v for v in recent_visits if v['app'] == app_name]
+        # Helper function to extract base app name (removing :port and https :port suffixes)
+        def get_base_app_name(app_name):
+            """Extract base app name, removing port suffixes like ' :port' and ' https :port'"""
+            # Remove patterns like " :1234" or " https :1234" at the end
+            # Match: space, optional "https", space, colon, digits
+            base_name = re.sub(r'\s+(?:https\s+)?:\d+$', '', app_name)
+            return base_name
+        
+        # Group app names by base name for aggregation
+        # First pass: collect all base app names and their variants
+        base_app_groups = defaultdict(list)
+        for app_name in data['apps'].keys():
+            base_name = get_base_app_name(app_name)
+            base_app_groups[base_name].append(app_name)
+        
+        # Per-app statistics (aggregated by base app name)
+        for base_app_name, app_variants in base_app_groups.items():
+            # Collect all visits for all variants of this app
+            all_app_visits = []
+            all_app_visitor_ids = set()
+            latest_visit = None
             
-            # Get unique visitors for this app in the period
-            app_visitor_ids = set(v['visitor_id'] for v in app_visits)
+            for app_name in app_variants:
+                # Filter visits for this app variant in the period
+                app_visits = [v for v in recent_visits if v['app'] == app_name]
+                all_app_visits.extend(app_visits)
+                
+                # Collect unique visitors
+                for visit in app_visits:
+                    all_app_visitor_ids.add(visit['visitor_id'])
+                
+                # Track latest visit across all variants
+                app_data = data['apps'].get(app_name, {})
+                variant_last_visit = app_data.get('last_visit')
+                if variant_last_visit:
+                    if latest_visit is None or variant_last_visit > latest_visit:
+                        latest_visit = variant_last_visit
             
-            # Get country breakdown
+            # Get country breakdown for all variants combined
             country_counts = defaultdict(int)
             referrer_counts = defaultdict(int)
-            for visit in app_visits:
+            for visit in all_app_visits:
                 country_counts[visit['country']] += 1
                 # Track referrer (will be 'Direct' if no referrer was present)
                 referrer = visit.get('referrer', 'Direct')
                 referrer_counts[referrer] += 1
             
-            stats['apps'][app_name] = {
-                'visits': len(app_visits),
-                'unique_visitors': len(app_visitor_ids),
+            stats['apps'][base_app_name] = {
+                'visits': len(all_app_visits),
+                'unique_visitors': len(all_app_visitor_ids),
                 'countries': dict(sorted(country_counts.items(), key=lambda x: x[1], reverse=True)),
                 'referrers': dict(sorted(referrer_counts.items(), key=lambda x: x[1], reverse=True)),
                 'top_referrers': dict(sorted(referrer_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
-                'last_visit': app_data.get('last_visit'),
+                'last_visit': latest_visit,
                 'top_countries': dict(sorted(country_counts.items(), key=lambda x: x[1], reverse=True)[:10])
             }
         
