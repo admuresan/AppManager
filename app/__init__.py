@@ -204,6 +204,8 @@ def create_app():
             # Default: group all non-mapped apps together as "App Manager"
             app_name = 'App Manager'
             
+            from app.models.app_config import AppConfig
+            
             # Check if this is a proxied app (not /blackgrid/)
             if request.blueprint == 'proxy':
                 # Extract app slug from path
@@ -212,7 +214,6 @@ def create_app():
                     app_slug = path_parts[0]
                     # Skip if it's blackgrid (shouldn't happen, but defensive)
                     if app_slug != 'blackgrid':
-                        from app.models.app_config import AppConfig
                         try:
                             app_config = AppConfig.get_by_slug(app_slug)
                             if app_config:
@@ -224,6 +225,35 @@ def create_app():
                         except:
                             # Error looking up app - group with App Manager
                             app_name = 'App Manager'
+            else:
+                # Check if request is coming to AppManager on a port that matches an app
+                # This handles cases where apps might be accessed through AppManager's port
+                # (though typically direct port access goes to the app itself, not AppManager)
+                try:
+                    # Extract port from Host header (e.g., "blackgrid.ddns.net:6006")
+                    host_header = request.host
+                    if ':' in host_header:
+                        port_str = host_header.split(':')[1]
+                        try:
+                            port = int(port_str)
+                            # Check if this port matches any configured app
+                            app_config = AppConfig.get_by_port(port)
+                            if app_config:
+                                # Determine if HTTPS or HTTP based on request
+                                is_https = request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https'
+                                app_base_name = app_config.get('name', 'Unknown App')
+                                # Format: "AppName :port" or "AppName https :port"
+                                if is_https:
+                                    app_name = f"{app_base_name} https :{port}"
+                                else:
+                                    app_name = f"{app_base_name} :{port}"
+                        except (ValueError, TypeError):
+                            # Port is not a valid integer, ignore
+                            pass
+                except Exception:
+                    # Error extracting port, fall back to default
+                    pass
+            
             # All other routes (welcome, admin, etc.) are grouped as "App Manager"
             # No need for elif - app_name already defaults to 'App Manager'
             

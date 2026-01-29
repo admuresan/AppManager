@@ -95,6 +95,16 @@ class AppConfig:
         return None
     
     @classmethod
+    def get_by_port(cls, port: int) -> Optional[Dict]:
+        """Get app configuration by port number"""
+        apps = cls.get_all()
+        for app in apps:
+            app_port = app.get('port')
+            if app_port and int(app_port) == port:
+                return app
+        return None
+    
+    @classmethod
     def create(cls, name: str, port: int, logo: Optional[str] = None, service_name: Optional[str] = None, serve_app: bool = True, folder_path: Optional[str] = None) -> Dict:
         """Create a new app configuration"""
         apps = cls.get_all()
