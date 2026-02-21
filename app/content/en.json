@@ -140,7 +140,9 @@
     "status_started": "Started",
     "status_stopped": "Stopped",
     "status_starting": "Starting",
-    "status_stopping": "Stopping"
+    "status_stopping": "Stopping",
+    "auto_column": "Auto",
+    "slug_column": "Slug"
   }
 }
 

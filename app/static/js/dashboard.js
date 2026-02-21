@@ -102,6 +102,10 @@ document.addEventListener('DOMContentLoaded', function setupDashboardEvents() {
         }
     });
     document.addEventListener('change', function handleDashboardChange(e) {
+        if (e.target.classList.contains('auto-start-checkbox')) {
+            setAutoStart(e.target.dataset.appId, e.target.checked);
+            return;
+        }
         if (e.target.classList.contains('serve-app-checkbox')) {
             toggleServeApp(e.target.dataset.appIndex, e.target.checked);
         }
@@ -110,6 +114,9 @@ document.addEventListener('DOMContentLoaded', function setupDashboardEvents() {
         }
         if (e.target.id === 'appmanager-log-filter-noise') {
             refreshAppManagerLogs();
+        }
+        if (e.target.id === 'appmanager-log-autorefresh') {
+            toggleAppManagerLogAutorefresh(e.target.checked);
         }
     });
     initAppManagerLogPanel();
@@ -160,7 +167,10 @@ async function refreshAppStatusIndicators() {
     var indicators = document.querySelectorAll('.app-status[data-port]');
     if (indicators.length === 0) return;
     try {
-        var response = await fetch('/blackgrid/admin/api/active-ports', { credentials: 'include' });
+        var response = await fetch('/blackgrid/admin/api/active-ports?_t=' + Date.now(), {
+            credentials: 'include',
+            cache: 'no-store'
+        });
         var result = await response.json();
         var activePorts = new Set();
         if (result.success && result.ports) {
@@ -199,6 +209,7 @@ function showAddModal(port, serviceName, folderPath, name) {
     if (folderPath) folderEl.value = folderPath;
     if (name) nameEl.value = name;
     portEl.removeAttribute('required');
+    hideSlugUnsafeMessage();
     document.getElementById('app-modal').style.display = 'block';
 }
 
@@ -225,10 +236,12 @@ function editApp(appId) {
                 if (app) {
                     document.getElementById('app-id').value = app.id;
                     document.getElementById('app-name').value = app.name;
+                    document.getElementById('app-slug').value = app.slug || '';
                     document.getElementById('app-port').value = app.port || '';
                     document.getElementById('app-service-name').value = app.service_name || '';
                     document.getElementById('app-folder-path').value = app.folder_path || '';
                     document.getElementById('app-port').removeAttribute('required');
+                    hideSlugUnsafeMessage();
                     document.getElementById('app-modal').style.display = 'block';
                 }
             });
@@ -239,6 +252,33 @@ function closeModal() {
     document.getElementById('app-modal').style.display = 'none';
     currentEditingId = null;
     clearModalError();
+    hideSlugUnsafeMessage();
+}
+
+function isSlugUrlSafe(value) {
+    var v = (value || '').trim();
+    if (v === '') return true;
+    if (v !== v.toLowerCase()) return false;
+    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(v);
+}
+
+function showSlugUnsafeMessage() {
+    var el = document.getElementById('app-slug-unsafe-msg');
+    if (el) el.style.display = 'block';
+    var input = document.getElementById('app-slug');
+    if (input) input.setAttribute('aria-invalid', 'true');
+}
+
+function hideSlugUnsafeMessage() {
+    var el = document.getElementById('app-slug-unsafe-msg');
+    if (el) el.style.display = 'none';
+    var input = document.getElementById('app-slug');
+    if (input) input.removeAttribute('aria-invalid');
+}
+
+function updateSlugUnsafeMessage() {
+    var value = (document.getElementById('app-slug') || {}).value || '';
+    if (isSlugUrlSafe(value)) hideSlugUnsafeMessage(); else showSlugUnsafeMessage();
 }
 
 function showModalError(message) {
@@ -668,17 +708,33 @@ async function refreshDiscoveredApps() {
     content.appendChild(loadingP);
 
     try {
-        var response = await fetch('/blackgrid/admin/api/config/discovered-apps');
+        var response = await fetch('/blackgrid/admin/api/config/discovered-apps?_t=' + Date.now(), {
+            credentials: 'include',
+            cache: 'no-store'
+        });
         const result = await response.json();
 
         if (result.success && result.apps && result.apps.length > 0) {
             window.__lastDiscoveredApps = result.apps;
-            var html = '<table><thead><tr><th>App</th><th>Port</th><th>Folder</th><th>Action</th></tr></thead><tbody>';
+            var skipTableReplace = window.__autoStartInProgress === true;
+            if (!skipTableReplace) {
+            var autoCol = msg('auto-column') || 'Auto';
+            var slugCol = msg('slug-column') || 'Slug';
+            var html = '<table><thead><tr><th>' + escapeHtml(autoCol) + '</th><th>AppName</th><th>' + escapeHtml(slugCol) + '</th><th>Port</th><th>Folder</th><th>Action</th></tr></thead><tbody>';
+            var apps = getApps();
             result.apps.forEach(function (item, idx) {
                 var isRegistered = item.already_registered;
                 var appId = item.app_id || '';
-                var actionCell;
+                var displayName = item.name;
                 if (isRegistered && appId) {
+                    var configured = apps.find(function (a) { return a && a.id === appId; });
+                    if (configured && configured.name) displayName = configured.name;
+                }
+                var actionCell;
+                var autoCell;
+                if (isRegistered && appId) {
+                    var checked = item.auto_start ? ' checked' : '';
+                    autoCell = '<td class="auto-start-cell"><input type="checkbox" class="auto-start-checkbox" data-app-id="' + escapeHtml(appId) + '"' + checked + ' title="Auto-start when stopped"></td>';
                     var menuEdit = msg('menu-edit') || 'Edit';
                     var menuStart = msg('menu-start') || 'Start';
                     var menuTest = msg('menu-test') || 'Test';
@@ -695,10 +751,12 @@ async function refreshDiscoveredApps() {
                         '<a href="#" class="app-action-link danger" data-action="delete" data-app-id="' + escapeHtml(appId) + '">' + menuDelete + '</a>' +
                         '</div></div></td>';
                 } else {
+                    autoCell = '<td></td>';
                     actionCell = '<td><button class="btn-icon btn-add-discovered" data-index="' + idx + '" title="Add as configured application">+</button></td>';
                 }
                 var appUrl = 'http://' + (window.location.hostname || 'localhost') + ':' + item.port;
-                html += '<tr><td class="port-number"><a href="' + escapeHtml(appUrl) + '" target="_blank" rel="noopener">' + escapeHtml(item.name) + '</a></td><td>' + item.port + '</td><td style="font-size: 0.85em; color: #808080;">' + escapeHtml(item.folder_path) + '</td>' + actionCell + '</tr>';
+                var slugDisplay = (item.slug != null && item.slug !== '') ? escapeHtml(item.slug) : '—';
+                html += '<tr>' + autoCell + '<td class="port-number"><a href="' + escapeHtml(appUrl) + '" target="_blank" rel="noopener">' + escapeHtml(displayName) + '</a></td><td class="app-slug-cell">' + slugDisplay + '</td><td>' + item.port + '</td><td style="font-size: 0.85em; color: #808080;">' + escapeHtml(item.folder_path) + '</td>' + actionCell + '</tr>';
             });
             html += '</tbody></table>';
             content.innerHTML = html;
@@ -709,6 +767,7 @@ async function refreshDiscoveredApps() {
                     if (item) addAppFromDiscovered(item.port, item.folder_path, item.name);
                 });
             });
+            }
             refreshAppStatusIndicators();
         } else {
             content.textContent = '';
@@ -828,6 +887,14 @@ document.addEventListener('DOMContentLoaded', function() {
     refreshPortsConsole();
     refreshAppStatusIndicators();
     initializeTerminal();
+
+    // Periodically refresh app status (Running/Stopped) so the page stays in sync when
+    // apps are started by the auto-start monitor or from another tab.
+    var statusRefreshInterval = setInterval(function() {
+        if (document.visibilityState === 'visible') {
+            refreshAppStatusIndicators();
+        }
+    }, 12000);
 });
 
 // Terminal functionality
@@ -1089,7 +1156,7 @@ async function executeCommand(command) {
         addTerminalLine('output', '  bash script.sh - Run a shell script');
         addTerminalLine('output', '  sh script.sh - Run a shell script');
         addTerminalLine('output', '  ./script.sh - Run an executable script');
-        addTerminalLine('output', '  Scripts must be in: ~, /opt/appmanager, or /tmp');
+        addTerminalLine('output', '  Scripts must be in: ~, /BlackGrid/appmanager, or /tmp');
         addTerminalLine('output', '');
         addTerminalLine('output', 'Terminal Commands:');
         addTerminalLine('output', '  clear - Clear terminal');
@@ -1170,9 +1237,18 @@ async function executeCommand(command) {
     }
 }
 
+document.getElementById('app-slug').addEventListener('input', updateSlugUnsafeMessage);
+document.getElementById('app-slug').addEventListener('change', updateSlugUnsafeMessage);
+
 document.getElementById('app-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     clearModalError();
+    var slugVal = (document.getElementById('app-slug') || {}).value || '';
+    if ((slugVal = slugVal.trim()) && !isSlugUrlSafe(slugVal)) {
+        showSlugUnsafeMessage();
+        document.getElementById('app-slug').focus();
+        return;
+    }
     var formData = new FormData(e.target);
     var appId = document.getElementById('app-id').value;
     var portInput = document.getElementById('app-port');
@@ -1185,7 +1261,8 @@ document.getElementById('app-form').addEventListener('submit', async function(e)
             var putBody = {
                 name: formData.get('name'),
                 service_name: (formData.get('service_name') || '').trim() || null,
-                folder_path: (formData.get('folder_path') || '').trim() || null
+                folder_path: (formData.get('folder_path') || '').trim() || null,
+                slug: (formData.get('slug') || '').trim()
             };
             if (portVal !== '') putBody.port = isNaN(portNum) ? portVal : portNum;
             response = await fetch('/blackgrid/admin/api/apps/' + appId, {
@@ -1379,6 +1456,43 @@ async function testApp(appId) {
 // NOTE: Do not close this modal on outside click.
 // It should only close via the "X" button (see `closeTestResultsModal()`).
 
+function getPortForApp(appId) {
+    var el = document.querySelector('.app-status[data-app-id="' + appId + '"][data-port]');
+    return el ? parseInt(el.dataset.port, 10) : null;
+}
+
+function pollUntilPortActive(appId, port, maxWaitMs) {
+    var interval = 1500;
+    var elapsed = 0;
+    return new Promise(function (resolve) {
+        function check() {
+            if (elapsed >= maxWaitMs) {
+                resolve(false);
+                return;
+            }
+            fetch('/blackgrid/admin/api/active-ports', { credentials: 'include' })
+                .then(function (r) { return r.json(); })
+                .then(function (result) {
+                    var activePorts = new Set();
+                    if (result.success && result.ports) {
+                        result.ports.forEach(function (p) { activePorts.add(Number(p.port)); });
+                    }
+                    if (activePorts.has(port)) {
+                        resolve(true);
+                        return;
+                    }
+                    elapsed += interval;
+                    setTimeout(check, interval);
+                })
+                .catch(function () {
+                    elapsed += interval;
+                    setTimeout(check, interval);
+                });
+        }
+        setTimeout(check, interval);
+    });
+}
+
 async function startApp(appId) {
     setAppStatusById(appId, 'starting');
     try {
@@ -1391,6 +1505,10 @@ async function startApp(appId) {
         if (result.success) {
             showAlert(result.message || 'App started.', 'success');
             refreshPortsConsole();
+            var port = getPortForApp(appId);
+            if (port) {
+                await pollUntilPortActive(appId, port, 20000);
+            }
             await refreshDiscoveredApps();
             setAppStatusById(appId, 'started');
             refreshAppStatusIndicators();
@@ -1429,6 +1547,10 @@ async function restartApp(appId) {
         if (result.success) {
             showAlert(result.message || 'App restarted.', 'success');
             refreshPortsConsole();
+            var port = getPortForApp(appId);
+            if (port) {
+                await pollUntilPortActive(appId, port, 20000);
+            }
             await refreshDiscoveredApps();
             setAppStatusById(appId, 'started');
             refreshAppStatusIndicators();
@@ -1487,6 +1609,33 @@ async function restartAppManager() {
         } else {
             alert('Error restarting App Manager: ' + error.message);
         }
+    }
+}
+
+async function setAutoStart(appId, enabled) {
+    window.__autoStartInProgress = true;
+    var checkbox = document.querySelector('.auto-start-checkbox[data-app-id="' + appId + '"]');
+    try {
+        var response = await fetch('/blackgrid/admin/api/apps/' + appId + '/set-auto-start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ auto_start: enabled })
+        });
+        var result = await response.json();
+        if (result.success) {
+            showAlert(enabled ? 'App will auto-start when stopped.' : 'Auto-start disabled.', 'success');
+            var currentCheckbox = document.querySelector('.auto-start-checkbox[data-app-id="' + appId + '"]');
+            if (currentCheckbox) currentCheckbox.checked = !!result.app.auto_start;
+        } else {
+            if (checkbox) checkbox.checked = !enabled;
+            showAlert(result.error || 'Failed to update auto-start', 'error');
+        }
+    } catch (e) {
+        if (checkbox) checkbox.checked = !enabled;
+        showAlert('Error updating auto-start: ' + (e && e.message ? e.message : String(e)), 'error');
+    } finally {
+        setTimeout(function() { window.__autoStartInProgress = false; }, 500);
     }
 }
 
@@ -2952,18 +3101,29 @@ async function refreshAppManagerLogs() {
 
 var _appmanagerLogRefreshInterval = null;
 
+function toggleAppManagerLogAutorefresh(enable) {
+    if (_appmanagerLogRefreshInterval) {
+        clearInterval(_appmanagerLogRefreshInterval);
+        _appmanagerLogRefreshInterval = null;
+    }
+    if (enable) {
+        _appmanagerLogRefreshInterval = setInterval(refreshAppManagerLogs, 1000);
+    }
+}
+
 function toggleAppManagerLogPanel() {
     var panel = document.getElementById('appmanager-log-panel');
     if (!panel) return;
     panel.classList.toggle('collapsed');
     if (!panel.classList.contains('collapsed')) {
         refreshAppManagerLogs();
-        _appmanagerLogRefreshInterval = setInterval(refreshAppManagerLogs, 5000);
     } else {
         if (_appmanagerLogRefreshInterval) {
             clearInterval(_appmanagerLogRefreshInterval);
             _appmanagerLogRefreshInterval = null;
         }
+        var autorefreshCb = document.getElementById('appmanager-log-autorefresh');
+        if (autorefreshCb) autorefreshCb.checked = false;
     }
 }
 

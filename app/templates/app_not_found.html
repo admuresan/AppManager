@@ -6,7 +6,7 @@
 {% block content %}
 <div class="welcome-page">
     <header class="welcome-header">
-        <img src="{{ url_for('welcome.media_file', filename='BlackGrid.png') }}" alt="BlackGrid Logo" style="max-width: 200px; margin-bottom: 20px;">
+        <img src="{{ url_for('logo') }}" alt="App Manager Logo" style="max-width: 200px; margin-bottom: 20px;">
         <h1>{{ t('errors.app_not_found.title') }}</h1>
         <p>{{ t('errors.app_not_found.body') }}</p>
         <p><a href="{{ url_for('welcome.index') }}" class="btn btn-primary" style="margin-top: 20px; display: inline-block; padding: 10px 20px; text-decoration: none; background: #667eea; color: white; border-radius: 5px;">{{ t('errors.app_not_found.cta') }}</a></p>

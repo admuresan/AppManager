@@ -31,16 +31,19 @@ sudo git clone <your-repo-url> appmanager
 ### Set Permissions
 
 ```bash
-sudo chown -R $USER:$USER /opt/appmanager
-cd /opt/appmanager
+sudo chown -R $USER:$USER /BlackGrid/appmanager
+cd /BlackGrid/appmanager
 ```
 
-### Create Virtual Environment (Optional but Recommended)
+### Create Virtual Environment (Recommended on Ubuntu)
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+cd /BlackGrid/appmanager
+./setup.sh
+# Or manually:
+# python3 -m venv AMvenv
+# source AMvenv/bin/activate
+# pip install -r requirements.txt
 ```
 
 ## Step 3: Configure Application
@@ -54,6 +57,11 @@ export SECRET_KEY="your-very-secure-secret-key-here"
 export PORT=80
 export FLASK_ENV=production
 ```
+
+**Port 80 on Ubuntu**: Binding to port 80 requires root or capabilities. Options:
+- **Option A (recommended)**: Run AppManager on a high port (e.g. 8080) and put Nginx in front on 80 (see Step 5). Set `PORT=8080` and in Nginx `proxy_pass http://127.0.0.1:8080`.
+- **Option B**: Allow binding to port 80 without root: `sudo setcap 'cap_net_bind_service=+ep' $(readlink -f AMvenv/bin/python)` (run once after creating venv).
+- **Option C**: Run the systemd service as root (not recommended for security).
 
 ### Initialize Instance Folder
 
@@ -72,7 +80,15 @@ After first run, edit `instance/admin_config.json` or use the admin panel to cha
 
 ## Step 4: Create Systemd Service
 
-Create `/etc/systemd/system/appmanager.service`:
+Copy the sample unit from the repo and edit it, or create `/etc/systemd/system/appmanager.service`:
+
+```bash
+sudo cp /BlackGrid/appmanager/deploy/appmanager.service /etc/systemd/system/
+# Edit: WorkingDirectory, User, Group, SECRET_KEY, and PORT if using 8080
+sudo nano /etc/systemd/system/appmanager.service
+```
+
+Example content:
 
 ```ini
 [Unit]
@@ -83,13 +99,13 @@ After=network.target
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/opt/appmanager
+WorkingDirectory=/BlackGrid/appmanager
 Environment="SECRET_KEY=your-secret-key-here"
 Environment="PORT=80"
 Environment="FLASK_ENV=production"
-ExecStart=/usr/bin/python3 /opt/appmanager/run.py
-# OR if using venv:
-# ExecStart=/opt/appmanager/venv/bin/python /opt/appmanager/run.py
+ExecStart=/BlackGrid/appmanager/AMvenv/bin/python /BlackGrid/appmanager/app.py
+# OR system Python (after pip install -r requirements.txt):
+# ExecStart=/usr/bin/python3 /BlackGrid/appmanager/app.py
 Restart=always
 RestartSec=10
 
@@ -229,7 +245,7 @@ sudo tail -f /var/log/nginx/access.log
 ## Updating Application
 
 ```bash
-cd /opt/appmanager
+cd /BlackGrid/appmanager
 git pull  # or upload new files
 sudo systemctl restart appmanager
 ```

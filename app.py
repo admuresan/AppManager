@@ -4,26 +4,14 @@ Main entry point for AppManager.
 IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import os
-import json
-from pathlib import Path
 import logging
 from app import create_app
 
 app = create_app()
 
 if __name__ == '__main__':
-    # Port configuration must come from ssh/deploy_config.json (architecture requirement).
-    # Environment variable PORT can override for local/dev convenience.
-    cfg_path = Path(__file__).resolve().parent / "ssh" / "deploy_config.json"
-    cfg = {}
-    try:
-        if cfg_path.exists():
-            cfg = json.loads(cfg_path.read_text(encoding="utf-8")) or {}
-    except Exception:
-        cfg = {}
-
-    default_port = int(cfg.get("server_port", 5000))
-    port = int(os.environ.get("PORT", default_port))
+    # Port: PORT env only. deploy_config.json is shared (server/user/password) and has no port.
+    port = int(os.environ.get("PORT", 80))
     
     # Enable debug mode by default for local development
     # Set FLASK_ENV=production to disable debug mode

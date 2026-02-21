@@ -97,9 +97,9 @@ Every file in this codebase MUST include a comment at the top directing develope
 - **Backup Strategy**: Implement regular backups for databases
 
 ### 14. Launching and DEV v Prod
-- **Main Launch**: The app should launch via an `app.py` file that stands up the app at a port defined in `ssh/deploy_config.json`
+- **Main Launch**: The app should launch via an `app.py` file that stands up the app at a port
     - The `app.py` file should be at the root of the project
-    - The port should be read from `deploy_config.json` (key: `server_port`)
+    - The port comes from the `PORT` environment variable (default 80). The shared `ssh/deploy_config.json` is for deploy (server/user/password) only, not port.
 - **Dev Mode**:
     - When in dev mode, the app should run on localhost with auto-reload enabled so that changes to the app code update immediately
     - Use Flask's debug mode or a development server with hot-reload capability
@@ -109,7 +109,7 @@ Every file in this codebase MUST include a comment at the top directing develope
     - Use a production WSGI server (e.g., Gunicorn, uWSGI)
     - Disable debug mode and verbose error messages
 - **Prod Deploy**: There should be a deploy script (e.g., `deploy.sh` or `deploy.py`) which deploys the app for production
-    - The script should deploy to the IP defined in `ssh/deploy_config.json` (key: `prod_server_ip`)
+    - The script should deploy to the IP defined in `ssh/deploy_config.json` (JSON key: `internalIP` or `prod_server_ip`)
     - The prod server is an Ubuntu server
     - SSH keys for deploying are in the `/ssh` folder
     - The deploy script should have two modes:

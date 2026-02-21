@@ -1,0 +1,34 @@
+# Systemd unit for AppManager on Ubuntu/Debian
+# Copy to /etc/systemd/system/appmanager.service then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable appmanager
+#   sudo systemctl start appmanager
+#
+# IMPORTANT: Set User= and Group= to your actual Linux username (e.g. whoami).
+# If User/Group don't exist you get "status=217/USER".
+# If you get "status=203/EXEC", the ExecStart path is wrong: run these on the server:
+#   ls -la /BlackGrid/appmanager/AMvenv/bin/python3
+#   ls -la /BlackGrid/appmanager/app.py
+# If AMvenv doesn't exist, run: cd /BlackGrid/appmanager && ./setup.sh
+# For port 80 without root: sudo setcap 'cap_net_bind_service=+ep' $(readlink -f /BlackGrid/appmanager/AMvenv/bin/python3)
+# Running on 8080 avoids "Permission denied" (non-root can't bind to port 80).
+# To use port 80: set PORT=80 and run: sudo setcap 'cap_net_bind_service=+ep' $(readlink -f /BlackGrid/appmanager/AMvenv/bin/python3)
+
+[Unit]
+Description=AppManager Gateway Application
+After=network.target
+
+[Service]
+Type=simple
+User=remoteterminal
+Group=remoteterminal
+WorkingDirectory=/BlackGrid/appmanager
+Environment="SECRET_KEY=your-secret-key-here"
+Environment="PORT=8080"
+Environment="FLASK_ENV=production"
+ExecStart=/BlackGrid/appmanager/AMvenv/bin/python3 /BlackGrid/appmanager/app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

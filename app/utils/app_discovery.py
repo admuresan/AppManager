@@ -3,7 +3,6 @@ Discover apps by scanning configured folders for app.py files and extracting por
 
 IMPORTANT: Read `instructions/architecture` before making changes.
 """
-import json
 import re
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -39,29 +38,9 @@ def _extract_port_from_python(file_path: Path) -> Optional[int]:
     return None
 
 
-def _extract_port_from_deploy_config(folder: Path) -> Optional[int]:
-    """Check ssh/deploy_config.json or deploy_config.json for server_port."""
-    for config_name in ["ssh/deploy_config.json", "deploy_config.json", "config.json"]:
-        cfg_path = folder / config_name
-        if cfg_path.exists():
-            try:
-                data = json.loads(cfg_path.read_text(encoding="utf-8"))
-                port = data.get("server_port") or data.get("port")
-                if port is not None:
-                    return int(port)
-            except (json.JSONDecodeError, IOError, ValueError, TypeError):
-                pass
-    return None
-
-
 def _get_port_for_folder(folder: Path) -> Optional[int]:
-    """Get port for an app folder by checking app.py, run.py, deploy_config, etc."""
-    # 1. Try deploy_config first (many apps use this)
-    port = _extract_port_from_deploy_config(folder)
-    if port is not None:
-        return port
-
-    # 2. Try Python entry files
+    """Get port for an app folder from Python entry files (app.py, run.py, etc.). deploy_config.json is shared and has no port."""
+    # Try Python entry files
     for entry in _ENTRY_FILES:
         py_path = folder / entry
         if py_path.exists() and py_path.is_file():
@@ -142,10 +121,10 @@ def discover_apps(search_folders: List[str], exclude_folders: Optional[List[str]
 def get_default_app_search_folder(instance_path: str) -> str:
     """
     Return the default folder to search for apps: parent of AppManager root.
-    AppManager runs from e.g. /opt/appmanager or C:\\Projects\\AppManager;
-    instance_path is e.g. /opt/appmanager/instance, so parent of AppManager = instance_path.parent.parent.
+    AppManager runs from e.g. /BlackGrid/appmanager or C:\\Projects\\AppManager;
+    instance_path is e.g. /BlackGrid/appmanager/instance, so parent of AppManager = instance_path.parent.parent.
     """
     instance = Path(instance_path).resolve()
-    appmanager_root = instance.parent  # /opt/appmanager or C:\Projects\AppManager
+    appmanager_root = instance.parent  # /BlackGrid/appmanager or C:\Projects\AppManager
     parent = appmanager_root.parent     # /opt or C:\Projects
     return str(parent)

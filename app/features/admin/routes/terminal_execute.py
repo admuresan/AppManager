@@ -38,7 +38,7 @@ def execute_terminal_command():
         # Security: Ensure working directory is in safe locations
         safe_directories = [
             os.path.expanduser("~"),
-            "/opt/appmanager",
+            "/BlackGrid/appmanager",
             "/tmp",
         ]
 
@@ -253,7 +253,7 @@ def execute_terminal_command():
                 script_path = match.group(1).strip().split()[0]
 
             if script_path:
-                safe_directories = [os.path.expanduser("~"), "/opt/appmanager", "/tmp"]
+                safe_directories = [os.path.expanduser("~"), "/BlackGrid/appmanager", "/tmp"]
 
                 if not os.path.isabs(script_path):
                     script_path = os.path.join(os.path.expanduser("~"), script_path)

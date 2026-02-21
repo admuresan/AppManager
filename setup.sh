@@ -42,7 +42,7 @@ $PYTHON_CMD --version
 echo ""
 
 echo "[1/3] Creating virtual environment 'AMvenv'..."
-$PYTHON_CMD -m venv AMvenv
+$PYTHON_CMD -m venv venv
 
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to create virtual environment"
@@ -54,10 +54,10 @@ echo "[2/3] Activating virtual environment..."
 # Detect OS and use appropriate activation script
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
     # Windows Git Bash
-    source AMvenv/Scripts/activate
+    source venv/Scripts/activate
 else
     # Linux/Mac
-    source AMvenv/bin/activate
+    source venv/bin/activate
 fi
 
 echo "[3/3] Installing dependencies..."
@@ -78,10 +78,10 @@ echo ""
 # Show activation command based on OS
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
     echo "To activate the virtual environment, run:"
-    echo "  source AMvenv/Scripts/activate"
+    echo "  source venv/Scripts/activate"
 else
     echo "To activate the virtual environment, run:"
-    echo "  source AMvenv/bin/activate"
+    echo "  source venv/bin/activate"
 fi
 
 echo ""

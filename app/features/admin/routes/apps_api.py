@@ -39,9 +39,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 @bp.route("/api/apps", methods=["GET"])
 @login_required
 def get_apps():
-    """Get all apps (API endpoint)."""
+    """Get all apps (API endpoint). Each app includes a 'slug' for display (effective slug)."""
     apps = AppConfig.get_all()
-    return jsonify({"apps": apps})
+    out = []
+    for app in apps:
+        a = dict(app)
+        a["slug"] = AppConfig.get_effective_slug(app)
+        out.append(a)
+    return jsonify({"apps": out})
 
 
 @bp.route("/api/apps", methods=["POST"])
@@ -74,6 +79,8 @@ def create_app():
     if not is_listening:
         current_app.logger.info("Adding app on port %s which is not yet listening", port)
 
+    slug = (request.form.get("slug") or "").strip()
+
     # Handle logo upload
     logo_path = None
     if "logo" in request.files:
@@ -101,11 +108,14 @@ def create_app():
             service_name=service_name if service_name else None,
             serve_app=True,
             folder_path=folder_path,
+            slug=slug if slug else None,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    return jsonify({"success": True, "app": app_config})
+    out = dict(app_config)
+    out["slug"] = AppConfig.get_effective_slug(app_config)
+    return jsonify({"success": True, "app": out})
 
 
 @bp.route("/api/apps/<app_id>", methods=["PUT"])
@@ -186,6 +196,15 @@ def update_app(app_id):
     old_port = existing_app.get("port")
     port_changed = old_port != port
 
+    slug = None
+    if request.content_type and "multipart/form-data" in request.content_type:
+        slug = (request.form.get("slug") or "").strip() or None
+    else:
+        data = request.get_json(silent=True) or {}
+        if "slug" in data:
+            slug = (data.get("slug") or "").strip() or ""  # "" means clear explicit slug
+        # else slug stays None = do not update slug
+
     try:
         app_config = AppConfig.update(
             app_id=app_id,
@@ -194,12 +213,15 @@ def update_app(app_id):
             logo=final_logo,
             service_name=service_name if service_name else None,
             folder_path=folder_path if folder_path else None,
+            slug=slug,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
     if app_config:
-        return jsonify({"success": True, "app": app_config})
+        out = dict(app_config)
+        out["slug"] = AppConfig.get_effective_slug(app_config)
+        return jsonify({"success": True, "app": out})
 
     return jsonify({"error": "App not found"}), 404
 
@@ -225,6 +247,23 @@ def toggle_serve_app(app_id):
     app_config = AppConfig.toggle_serve_app(app_id)
     if app_config:
         return jsonify({"success": True, "app": app_config})
+    return jsonify({"error": "App not found"}), 404
+
+
+@bp.route("/api/apps/<app_id>/set-auto-start", methods=["POST"])
+@login_required
+def set_auto_start(app_id):
+    """Set auto_start for an app (start automatically when stopped)."""
+    app_config = AppConfig.get_by_id(app_id)
+    if not app_config:
+        return jsonify({"error": "App not found"}), 404
+    data = request.get_json(silent=True) or {}
+    auto_start = data.get("auto_start")
+    if not isinstance(auto_start, bool):
+        return jsonify({"error": "auto_start must be true or false"}), 400
+    updated = AppConfig.update(app_id=app_id, auto_start=auto_start)
+    if updated:
+        return jsonify({"success": True, "app": updated})
     return jsonify({"error": "App not found"}), 404
 
 
@@ -385,15 +424,17 @@ def start_app(app_id):
     folder_path = (app_config.get("folder_path") or "").strip()
     instance_path = current_app.instance_path
 
+    app_label = app_config.get("name") or app_id
+    slug = AppConfig.get_effective_slug(app_config)
     if platform.system() == "Windows":
         path_to_use = app_config.get("windows_path", "").strip()
         if not path_to_use:
             return jsonify({"success": False, "error": "Windows path is not configured. Edit the app and set the Windows path."}), 400
-        success, message = start_app_windows(folder_path=path_to_use, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path)
+        success, message = start_app_windows(folder_path=path_to_use, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path, app_label=app_label, slug=slug)
     else:
         if not folder_path:
             return jsonify({"success": False, "error": "App folder path is not configured. Edit the app and set the folder path."}), 400
-        success, message = start_app_linux(folder_path=folder_path, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path)
+        success, message = start_app_linux(folder_path=folder_path, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path, app_label=app_label, slug=slug)
 
     if success:
         return jsonify({"success": True, "message": message})
@@ -423,15 +464,17 @@ def restart_app(app_id):
         folder_path = (app_config.get("folder_path") or "").strip()
 
         instance_path = current_app.instance_path
+        app_label = app_config.get("name") or app_id
+        slug = AppConfig.get_effective_slug(app_config)
         if platform.system() == "Windows":
             path_to_use = app_config.get("windows_path", "").strip()
             if not path_to_use:
                 return jsonify({"success": False, "error": "Windows path not configured"}), 400
-            success, message = start_app_windows(folder_path=path_to_use, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path)
+            success, message = start_app_windows(folder_path=path_to_use, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path, app_label=app_label, slug=slug)
         else:
             if not folder_path:
                 return jsonify({"success": False, "error": "App folder path not configured"}), 400
-            success, message = start_app_linux(folder_path=folder_path, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path)
+            success, message = start_app_linux(folder_path=folder_path, start_command=start_command, port=port, app_id=app_id, instance_path=instance_path, app_label=app_label, slug=slug)
 
         if success:
             return jsonify({"success": True, "message": message})

@@ -11,6 +11,9 @@
 
 <div class="welcome-page">
     <header class="welcome-header">
+        <div class="welcome-logo-wrap">
+            <img src="{{ url_for('logo') }}" alt="{{ manager_app.name }}" class="welcome-logo" onerror="this.style.display='none'">
+        </div>
         <h1>{{ t('welcome.header_title') }}</h1>
         <p>{{ t('welcome.header_subtitle') }}</p>
     </header>
@@ -19,12 +22,10 @@
         <!-- Other Apps -->
         {% for app in apps %}
         <div class="app-card">
-            {# Direct link to app on its port #}
-            <a href="http://{{ server_address }}:{{ app.port }}" class="app-link" target="_blank">
-                {% if app.logo %}
-                    {# Strip 'uploads/' prefix if present since route already includes it #}
-                    {% set logo_filename = app.logo.replace('uploads/', '', 1) if app.logo.startswith('uploads/') else app.logo %}
-                    <img src="{{ url_for('admin.uploaded_file', filename=logo_filename) }}" alt="{{ app.name }}" class="app-logo">
+            {# Path-based link: domain/calculator, etc. #}
+            <a href="/{{ app.slug }}" class="app-link" target="_blank">
+                {% if app.has_logo and app.logo_url %}
+                    <img src="{{ app.logo_url }}" alt="{{ app.name }}" class="app-logo">
                 {% else %}
                     <div class="app-logo-placeholder">{{ app.name[0].upper() }}</div>
                 {% endif %}

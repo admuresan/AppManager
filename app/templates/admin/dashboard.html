@@ -551,6 +551,14 @@
         color: #808080;
         font-size: 0.85em;
     }
+    .auto-start-cell {
+        text-align: center;
+        vertical-align: middle;
+    }
+    .auto-start-cell input[type="checkbox"] {
+        cursor: pointer;
+        accent-color: #667eea;
+    }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -784,6 +792,13 @@
             </div>
             
             <div class="form-group">
+                <label for="app-slug">Slug</label>
+                <p id="app-slug-unsafe-msg" class="app-slug-unsafe-msg" style="display: none; margin: 0 0 6px 0; font-size: 0.85em; color: #dc3545;">Slug is not URL-safe. Use only lowercase letters, numbers, and hyphens (no spaces or special characters).</p>
+                <input type="text" id="app-slug" name="slug" placeholder="e.g. calculator (URL path)">
+                <small>URL path segment for this app (e.g. /calculator). Generated from name if blank. Must be unique.</small>
+            </div>
+            
+            <div class="form-group">
                 <label for="app-folder-path">App Folder *</label>
                 <input type="text" id="app-folder-path" name="folder_path" required placeholder="e.g. /BlackGrid/calculator or /opt/myapp">
                 <small>Full path to the folder containing app.py</small>
@@ -885,7 +900,10 @@
         <label class="appmanager-log-filter">
             <input type="checkbox" id="appmanager-log-filter-noise" checked> Hide noisy logs
         </label>
-        <button type="button" class="btn btn-secondary btn-sm appmanager-log-refresh" data-action="refreshAppManagerLogs">🔄</button>
+        <label class="appmanager-log-filter">
+            <input type="checkbox" id="appmanager-log-autorefresh"> Auto-refresh (1s)
+        </label>
+        <button type="button" class="btn btn-secondary btn-sm appmanager-log-refresh" data-action="refreshAppManagerLogs">🔄 Refresh</button>
         <button type="button" class="appmanager-log-toggle" id="appmanager-log-toggle" data-action="toggleAppManagerLogPanel" aria-label="Expand/Collapse"></button>
     </div>
     <div class="appmanager-log-content">
@@ -912,6 +930,7 @@
      data-msg-menu-test="{{ t('admin_dashboard.menu.test')|e }}"
      data-msg-menu-restart="{{ t('admin_dashboard.menu.restart')|e }}"
      data-msg-menu-see-logs="{{ t('admin_dashboard.menu.see_logs')|e }}"
-     data-msg-menu-delete="{{ t('admin_dashboard.menu.delete')|e }}"></div>
+     data-msg-menu-delete="{{ t('admin_dashboard.menu.delete')|e }}"
+     data-msg-auto-column="{{ t('admin_dashboard.auto_column')|e }}"></div>
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

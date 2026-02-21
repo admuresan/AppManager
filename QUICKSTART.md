@@ -29,7 +29,7 @@
 
 3. **Run the application**:
    ```bash
-   # Default runs on port 5000 for local development
+   # Port: PORT env (default 80)
    python app.py
    
    # Or use the run script (Windows: run.bat, Linux/Mac: ./run.sh)
@@ -37,13 +37,13 @@
 
    **Note**: You'll know the virtual environment is activated when you see `(AMvenv)` at the beginning of your command prompt.
 
-3. **Access the application**:
-- Welcome page: http://localhost:5000
-- Admin login: http://localhost:5000/admin/login
+4. **Access the application**:
+- Welcome page: http://localhost:80 (or the port you configured)
+- Admin login: http://localhost:80/admin/login
   - Credentials are stored in `instance/admin_config.json` (not git-backed).
   - If this is your first run, set `APP_MANAGER_ADMIN_PASSWORD` (and optionally `APP_MANAGER_ADMIN_USERNAME`) before starting.
 
-**Note**: The app defaults to port 5000 for local development. On the server, set `PORT=80` or `PORT=443` for production use.
+**Note**: Port is set by `PORT` env (default 80). On Ubuntu production, see `DEPLOYMENT.md`. The shared `ssh/deploy_config.json` is for deploy (server/user/password) only, not port.
 
 ## First Steps
 
@@ -85,20 +85,20 @@ To test AppManager locally with your existing apps:
    python run.py  # or your run script
    ```
 
-2. **Start AppManager on port 5000**:
+2. **Start AppManager**:
    ```bash
-   # Terminal 4: Start AppManager
+   # Terminal 4: Start AppManager (PORT env, default 80; deploy_config.json is shared and has no port)
    cd AppManager
-   python run.py
+   python app.py
    ```
 
 3. **Configure apps in AppManager**:
-   - Visit http://localhost:5000/admin/login
+   - Visit http://localhost:80/admin/login (or your configured port)
    - Add each app with its port number
    - Test each app to verify connectivity
 
 4. **Use the apps**:
-   - Visit http://localhost:5000
+   - Visit http://localhost:80 (or your configured port)
    - Click on any app to use it through AppManager
    - Each browser tab maintains its own app selection
 
@@ -109,10 +109,10 @@ For production on the server, set the PORT environment variable:
 ```bash
 # For HTTP (port 80)
 export PORT=80
-python run.py
+python app.py
 
-# Or use a production WSGI server like Gunicorn
-gunicorn -w 4 -b 0.0.0.0:80 run:app
+# Or use a production WSGI server (e.g. on Ubuntu)
+gunicorn -w 4 -b 0.0.0.0:80 app:app
 ```
 
 The app will automatically use `0.0.0.0` as the host in production mode (when `FLASK_ENV != 'development'`).

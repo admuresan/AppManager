@@ -14,10 +14,10 @@ echo "Activating virtual environment..."
 # Detect OS and use appropriate activation script
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
     # Windows Git Bash
-    source AMvenv/Scripts/activate
+    source venv/Scripts/activate
 else
     # Linux/Mac
-    source AMvenv/bin/activate
+    source venv/bin/activate
 fi
 
 echo "Starting AppManager..."

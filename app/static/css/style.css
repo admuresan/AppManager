@@ -62,6 +62,21 @@ body {
     background: transparent;
 }
 
+.welcome-logo-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.welcome-logo {
+    height: 120px;
+    width: auto;
+    max-width: 200px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
 .logo-container {
     margin-bottom: 30px;
     display: flex;

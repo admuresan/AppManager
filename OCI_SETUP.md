@@ -151,7 +151,7 @@ After updating the configuration file, you can verify it works:
 ssh -i ssh/ssh-key-2025-12-26.key ubuntu@40.233.70.245
 
 # Test OCI connection (if OCI CLI is installed)
-cd /opt/appmanager
+cd /BlackGrid/appmanager
 source AMvenv/bin/activate
 python3 -c "from app.utils.oci_manager import get_oci_manager; m = get_oci_manager(); print('OCI configured:', m.is_configured())"
 ```

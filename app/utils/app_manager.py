@@ -13,10 +13,13 @@ from pathlib import Path
 
 import psutil
 
-def _log_startup_step(step: str):
-    """Log startup step so it appears in terminal and AppManager log file."""
+def _log_startup_step(step: str, app_label: str = None):
+    """Log startup step so it appears in terminal and AppManager log file. If app_label is set, prefix with it."""
     import sys
-    print(f"[AppManager] {step}", flush=True, file=sys.stderr)
+    if app_label:
+        print(f"[AppManager] {app_label}: {step}", flush=True, file=sys.stderr)
+    else:
+        print(f"[AppManager] {step}", flush=True, file=sys.stderr)
 
 
 def test_app_port(port):
@@ -132,7 +135,7 @@ def _venv_requirements_match(app_path: Path, venv_dir: Path) -> bool:
         return False
 
 
-def _ensure_venv_and_deps(app_path: Path, venv_name: str = None) -> tuple:
+def _ensure_venv_and_deps(app_path: Path, venv_name: str = None, app_label: str = None) -> tuple:
     """
     Ensure a virtual environment exists and dependencies are installed.
     Returns (python_exe_path, message) - path is None on failure.
@@ -146,7 +149,7 @@ def _ensure_venv_and_deps(app_path: Path, venv_name: str = None) -> tuple:
 
     if not py_path:
         # 2. Create venv (use 'venv' as default folder name)
-        _log_startup_step("Creating venv...")
+        _log_startup_step("Creating venv...", app_label=app_label)
         target_name = venv_name or 'venv'
         venv_dir = app_path / target_name
         try:
@@ -176,7 +179,7 @@ def _ensure_venv_and_deps(app_path: Path, venv_name: str = None) -> tuple:
     req_files = [app_path / 'requirements.txt', app_path / 'app' / 'requirements.txt']
     for req_file in req_files:
         if req_file.exists():
-            _log_startup_step("Installing requirements...")
+            _log_startup_step("Installing requirements...", app_label=app_label)
             try:
                 subprocess.run(
                     [str(py_path), '-m', 'pip', 'install', '-r', str(req_file), '-q'],
@@ -194,7 +197,7 @@ def _ensure_venv_and_deps(app_path: Path, venv_name: str = None) -> tuple:
     return py_path, "Venv ready" if created else "Using existing venv"
 
 
-def _ensure_venv_and_deps_linux(app_path: Path, venv_name: str = None) -> tuple:
+def _ensure_venv_and_deps_linux(app_path: Path, venv_name: str = None, app_label: str = None) -> tuple:
     """
     Ensure a virtual environment exists on Linux, deps match requirements.txt.
     If no venv or requirements mismatch: create venv, install deps, copy requirements.txt into venv.
@@ -214,12 +217,12 @@ def _ensure_venv_and_deps_linux(app_path: Path, venv_name: str = None) -> tuple:
         recreate = True
 
     if recreate:
-        _log_startup_step("No venv or requirements mismatch; creating venv and installing requirements...")
+        _log_startup_step("No venv or requirements mismatch; creating venv and installing requirements...", app_label=app_label)
     else:
-        _log_startup_step("Found venv with matching requirements.")
+        _log_startup_step("Found venv with matching requirements.", app_label=app_label)
 
     if recreate:
-        _log_startup_step("Creating venv...")
+        _log_startup_step("Creating venv...", app_label=app_label)
         # Remove old venv if exists
         for name in ['venv', '.venv', 'env']:
             vd = app_path / name
@@ -252,7 +255,7 @@ def _ensure_venv_and_deps_linux(app_path: Path, venv_name: str = None) -> tuple:
         if not req_file.exists():
             req_file = app_path / 'app' / 'requirements.txt'
         if req_file.exists():
-            _log_startup_step("Installing requirements...")
+            _log_startup_step("Installing requirements...", app_label=app_label)
             try:
                 subprocess.run(
                     [str(py_path), '-m', 'pip', 'install', '-r', str(req_file), '-q'],
@@ -283,11 +286,14 @@ def start_app_linux(
     port: int = None,
     app_id: str = None,
     instance_path: str = None,
+    app_label: str = None,
+    slug: str = None,
 ) -> tuple:
     """
     Start an app in the background on Linux.
     Checks for venv, creates/updates if requirements mismatch, then launches with FLASK_ENV=production.
     If app_id and instance_path are provided, stdout/stderr are captured to instance/logs/apps/{app_id}.log.
+    app_label is used in startup logs (e.g. "MyApp: Creating venv...").
     """
     if platform.system() != 'Linux':
         return False, "Linux start is only available on Linux"
@@ -306,11 +312,12 @@ def start_app_linux(
     if not start_command:
         return False, "Start command is empty"
 
-    py_path, venv_msg = _ensure_venv_and_deps_linux(path, venv_name=None)
+    label = app_label or app_id
+    py_path, venv_msg = _ensure_venv_and_deps_linux(path, venv_name=None, app_label=label)
     if py_path is None:
         return False, venv_msg
 
-    _log_startup_step("Running app.py...")
+    _log_startup_step("Running app.py...", app_label=label)
     venv_bin = str(py_path.parent)
     venv_root = str(py_path.parent.parent)
     env = {
@@ -321,6 +328,8 @@ def start_app_linux(
     if port is not None:
         env['PORT'] = str(port)
         env['SERVER_PORT'] = str(port)
+    if slug:
+        env['APPLICATION_ROOT'] = '/' + slug.strip('/')
     if 'HOME' in os.environ:
         env['HOME'] = os.environ['HOME']
 
@@ -340,7 +349,8 @@ def start_app_linux(
         log_path = logs_dir / f"{app_id}.log"
         try:
             opened_log = open(log_path, "a", encoding="utf-8")
-            opened_log.write(f"[AppManager] Starting process at {time.strftime('%Y-%m-%d %H:%M:%S')} ...\n")
+            prefix = f"[AppManager] {label}: " if label else "[AppManager] "
+            opened_log.write(f"{prefix}Starting process at {time.strftime('%Y-%m-%d %H:%M:%S')} ...\n")
             opened_log.flush()
             stdout_err = opened_log
             stderr_err = subprocess.STDOUT
@@ -370,7 +380,8 @@ def start_app_linux(
             )
         if opened_log:
             try:
-                opened_log.write(f"[AppManager] Process started (PID: {proc.pid})\n")
+                prefix = f"[AppManager] {label}: " if label else "[AppManager] "
+                opened_log.write(f"{prefix}Process started (PID: {proc.pid})\n")
                 opened_log.flush()
             except Exception:
                 pass
@@ -380,9 +391,9 @@ def start_app_linux(
             for attempt in range(4):
                 time.sleep(2)
                 if test_app_port(port):
-                    _log_startup_step("Port is listening.")
+                    _log_startup_step("Port is listening.", app_label=label)
                     return True, f"App started (PID: {proc.pid}, port {port} ready)"
-            _log_startup_step("Port did not come up within 8s.")
+            _log_startup_step("Port did not come up within 8s.", app_label=label)
             return False, "App process started but port did not come up within 8 seconds"
         return True, f"App started in background (PID: {proc.pid})"
     except Exception as e:
@@ -395,12 +406,15 @@ def start_app_windows(
     port: int = None,
     app_id: str = None,
     instance_path: str = None,
+    app_label: str = None,
+    slug: str = None,
 ) -> tuple:
     """
     Start an app in the background on Windows.
     Ensures a virtual environment exists (creates one if not), installs requirements.txt if present,
     then runs the start_command in the given folder_path as a detached process.
     If app_id and instance_path are provided, stdout/stderr are captured to instance/logs/apps/{app_id}.log.
+    app_label is used in startup logs (e.g. "MyApp: Creating venv...").
 
     Returns:
         Tuple of (success: bool, message: str)
@@ -422,12 +436,13 @@ def start_app_windows(
     if not start_command:
         return False, "Start command is empty"
 
-    _log_startup_step("Checking venv and dependencies...")
-    py_path, venv_msg = _ensure_venv_and_deps(path, venv_name=None)
+    label = app_label or app_id
+    _log_startup_step("Checking venv and dependencies...", app_label=label)
+    py_path, venv_msg = _ensure_venv_and_deps(path, venv_name=None, app_label=label)
     if py_path is None:
         return False, venv_msg
 
-    _log_startup_step("Running app.py...")
+    _log_startup_step("Running app.py...", app_label=label)
     scripts_dir = py_path.parent
     env = {
         'PATH': str(scripts_dir),
@@ -437,6 +452,8 @@ def start_app_windows(
     if port is not None:
         env['PORT'] = str(port)
         env['SERVER_PORT'] = str(port)
+    if slug:
+        env['APPLICATION_ROOT'] = '/' + slug.strip('/')
     if 'HOME' in os.environ:
         env['HOME'] = os.environ['HOME']
     if 'SYSTEMROOT' in os.environ:
@@ -457,7 +474,8 @@ def start_app_windows(
         log_path = logs_dir / f"{app_id}.log"
         try:
             opened_log = open(log_path, "a", encoding="utf-8")
-            opened_log.write(f"[AppManager] Starting process at {time.strftime('%Y-%m-%d %H:%M:%S')} ...\n")
+            prefix = f"[AppManager] {label}: " if label else "[AppManager] "
+            opened_log.write(f"{prefix}Starting process at {time.strftime('%Y-%m-%d %H:%M:%S')} ...\n")
             opened_log.flush()
             stdout_err = opened_log
             stderr_err = subprocess.STDOUT
@@ -483,7 +501,8 @@ def start_app_windows(
         )
         if opened_log:
             try:
-                opened_log.write(f"[AppManager] Process started (PID: {proc.pid})\n")
+                prefix = f"[AppManager] {label}: " if label else "[AppManager] "
+                opened_log.write(f"{prefix}Process started (PID: {proc.pid})\n")
                 opened_log.flush()
             except Exception:
                 pass
@@ -493,13 +512,54 @@ def start_app_windows(
             for attempt in range(4):
                 time.sleep(2)
                 if test_app_port(port):
-                    _log_startup_step("Port is listening.")
+                    _log_startup_step("Port is listening.", app_label=label)
                     return True, f"App started (PID: {proc.pid}, port {port} ready)"
-            _log_startup_step("Port did not come up within 8s.")
+            _log_startup_step("Port did not come up within 8s.", app_label=label)
             return False, "App process started but port did not come up within 8 seconds"
         return True, f"App started in background (PID: {proc.pid})"
     except Exception as e:
         return False, f"Failed to start app: {str(e)}"
+
+
+def start_app_by_config(app_config: dict, instance_path: str) -> tuple:
+    """
+    Start an app using its config dict (for auto-start monitor).
+    Returns (success: bool, message: str).
+    """
+    from app.models.app_config import AppConfig
+
+    start_command = app_config.get("windows_start_command") or "python app.py"
+    port = app_config.get("port")
+    folder_path = (app_config.get("folder_path") or "").strip()
+    app_id = app_config.get("id")
+    app_label = app_config.get("name") or app_id
+    slug = AppConfig.get_effective_slug(app_config)
+
+    if platform.system() == "Windows":
+        path_to_use = (app_config.get("windows_path") or "").strip()
+        if not path_to_use:
+            return False, "Windows path is not configured"
+        return start_app_windows(
+            folder_path=path_to_use,
+            start_command=start_command,
+            port=port,
+            app_id=app_id,
+            instance_path=instance_path,
+            app_label=app_label,
+            slug=slug,
+        )
+    else:
+        if not folder_path:
+            return False, "App folder path is not configured"
+        return start_app_linux(
+            folder_path=folder_path,
+            start_command=start_command,
+            port=port,
+            app_id=app_id,
+            instance_path=instance_path,
+            app_label=app_label,
+            slug=slug,
+        )
 
 
 def detect_service_name_by_port(port):
@@ -682,8 +742,8 @@ def _should_exclude_port(port, service_name=None, process_name=None):
     Determine if a port should be excluded from the active ports list.
     Excludes system ports, web server ports, and AppManager itself.
     """
-    # Exclude AppManager port (5000)
-    if port == 5000:
+    # Exclude AppManager port (80)
+    if port == 80:
         return True
     
     # Exclude standard web server ports
@@ -723,7 +783,7 @@ def get_active_ports_and_services():
     """
     Get a list of all active ports on localhost and their associated service names.
     Returns a list of dicts with port, service_name, and pid.
-    Excludes system ports, web server ports (80/443), and AppManager port (5000).
+    Excludes system ports, web server ports (80/443), and AppManager port (80).
     """
     active_ports = []
     

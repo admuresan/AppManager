@@ -206,6 +206,8 @@ def get_discovered_apps():
                 if matched:
                     app["app_id"] = matched.get("id")
                     app["service_name"] = matched.get("service_name")
+                    app["auto_start"] = matched.get("auto_start", False)
+                    app["slug"] = AppConfig.get_effective_slug(matched)
                     if matched.get("port") is not None:
                         app["port"] = matched["port"]
 

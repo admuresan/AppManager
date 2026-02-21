@@ -41,7 +41,7 @@ def terminal_autocomplete():
         search_dir = os.path.normpath(search_dir)
         search_dir_abs = os.path.abspath(search_dir)
 
-        safe_directories = [os.path.expanduser("~"), "/opt/appmanager", "/tmp"]
+        safe_directories = [os.path.expanduser("~"), "/BlackGrid/appmanager", "/tmp"]
 
         search_allowed = False
         for safe_dir in safe_directories:

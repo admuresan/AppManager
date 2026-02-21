@@ -33,17 +33,17 @@ python run.py
 
 ### 2. Start AppManager
 
-**Terminal 4 - AppManager (port 5000)**:
+**Terminal 4 - AppManager** (PORT env, default 80):
 ```bash
 cd AppManager
-python run.py
+python app.py
 ```
 
-AppManager will start on `http://localhost:5000` by default.
+AppManager will start on `http://localhost:80` by default (or your configured port).
 
 ### 3. Configure Apps in AppManager
 
-1. Visit http://localhost:5000/admin/login
+1. Visit http://localhost:80/admin/login (or your port)
 2. Log in with:
    - Credentials from `instance/admin_config.json` (not git-backed)
    - If this is the first run, initialize via `APP_MANAGER_ADMIN_PASSWORD` (and optionally `APP_MANAGER_ADMIN_USERNAME`) before starting.
@@ -55,7 +55,7 @@ AppManager will start on `http://localhost:5000` by default.
 
 ### 4. Test the Gateway
 
-1. Visit http://localhost:5000 (welcome page)
+1. Visit http://localhost:80 (welcome page; or your configured port)
 2. Click on any app card
 3. You should be redirected and see the app's interface
 4. Try different apps in different browser tabs - each maintains its own session
@@ -88,7 +88,7 @@ AppManager will start on `http://localhost:5000` by default.
 - Ensure the port matches what you configured in AppManager
 
 ### Port Already in Use
-- Find what's using the port: `netstat -ano | findstr :5000` (Windows) or `lsof -i :5000` (Linux/Mac)
+- Find what's using the port: `netstat -ano | findstr :80` (Windows) or `lsof -i :80` (Linux/Mac)
 - Kill the process or use a different port
 
 ### Session Issues
@@ -104,7 +104,7 @@ AppManager will start on `http://localhost:5000` by default.
 
 | Setting | Local Development | Production Server |
 |---------|------------------|------------------|
-| AppManager Port | 5000 (default) | 80 or 443 |
+| AppManager Port | 80 (default) | 80 or 443 |
 | Host | 127.0.0.1 | 0.0.0.0 |
 | Debug Mode | Enabled | Disabled |
 | Internal Apps | localhost:5001, etc. | localhost:5001, etc. |

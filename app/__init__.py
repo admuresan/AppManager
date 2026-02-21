@@ -5,6 +5,8 @@ IMPORTANT: Read `instructions/architecture` before making changes.
 """
 import logging
 import sys
+import threading
+import time
 from pathlib import Path
 
 import os
@@ -114,6 +116,33 @@ def create_app():
         """Redirect root to welcome page"""
         from flask import redirect, url_for
         return redirect(url_for('welcome.index'))
+
+    # Serve logo from project root: any logo.* image (logo.png, logo.svg, etc.)
+    @app.route('/logo.png')
+    def logo():
+        """Serve logo from project root as app icon (accepts logo.* with any image extension)."""
+        from flask import send_file, abort
+        project_root = Path(app.root_path).parent
+        logo_extensions = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico"}
+        logo_path = None
+        if project_root.is_dir():
+            for f in project_root.iterdir():
+                if f.is_file() and f.stem.lower() == "logo" and f.suffix.lower() in logo_extensions:
+                    logo_path = f
+                    break
+        if logo_path is not None:
+            ext = logo_path.suffix.lower()
+            mimetypes = {
+                ".ico": "image/x-icon",
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".svg": "image/svg+xml",
+                ".webp": "image/webp",
+            }
+            return send_file(str(logo_path), mimetype=mimetypes.get(ext, "image/png"))
+        abort(404)
     
     # Handle favicon requests - serve app logo from manager based on Referer
     @app.route('/favicon.ico')
@@ -198,6 +227,22 @@ def create_app():
     app.register_blueprint(welcome.bp)  # /blackgrid/
     app.register_blueprint(admin.bp)    # /blackgrid/admin/
     app.register_blueprint(docs.bp)     # /blackgrid/docs
+
+    # Path-based app proxy: /<app_slug>, /<app_slug>/, and /<app_slug>/<path> -> forward to localhost:port
+    from app.utils import proxy_to_app
+    _proxy_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+
+    @app.route('/<slug>', methods=_proxy_methods)
+    def proxy_app(slug):
+        return proxy_to_app.proxy_view(slug)
+
+    @app.route('/<slug>/', methods=_proxy_methods)
+    def proxy_app_trailing_slash(slug):
+        return proxy_to_app.proxy_view(slug, '')
+
+    @app.route('/<slug>/<path:subpath>', methods=_proxy_methods)
+    def proxy_app_subpath(slug, subpath):
+        return proxy_to_app.proxy_view(slug, subpath)
 
     # Inject text/content helper into templates.
     from app.utils.content import t as _t
@@ -332,7 +377,49 @@ def create_app():
     #     tracker.start_auto_shutdown_monitor(shutdown_callback)
     # except Exception as e:
     #     app.logger.error(f"Error initializing auto-shutdown monitor: {e}")
-    
+
+    # Auto-start monitor: start apps with auto_start=True when they are stopped
+    _instance_path = app.instance_path
+
+    def _auto_start_monitor_loop():
+        logger = logging.getLogger(__name__)
+        instance_path = _instance_path
+        if not instance_path:
+            return
+        try:
+            from app.models.app_config import AppConfig
+            from app.utils.app_manager import test_app_port, start_app_by_config
+        except Exception as e:
+            logger.error("Auto-start monitor: failed to import deps: %s", e)
+            return
+        while True:
+            time.sleep(60)
+            try:
+                for app_config in AppConfig.get_all():
+                    if not app_config.get("auto_start"):
+                        continue
+                    port = app_config.get("port")
+                    if not port:
+                        continue
+                    if test_app_port(port):
+                        continue
+                    name = app_config.get("name", "?")
+                    logger.info("Auto-start: %s (port %s) is stopped, starting...", name, port)
+                    success, message = start_app_by_config(app_config, instance_path)
+                    if success:
+                        logger.info("Auto-start: %s started: %s", name, message)
+                    else:
+                        logger.warning("Auto-start: %s failed: %s", name, message)
+            except Exception as e:
+                logger.error("Auto-start monitor error: %s", e, exc_info=True)
+
+    try:
+        _thread = threading.Thread(target=_auto_start_monitor_loop, daemon=True)
+        _thread.start()
+        app.logger.info("Auto-start monitor started")
+    except Exception as e:
+        app.logger.error("Error starting auto-start monitor: %s", e)
+
     return app
 
 # Create app instance for WSGI servers (gunicorn, etc.)

@@ -79,13 +79,13 @@ cd AppManager
    ```
    Or use: `./run.sh`
 
-   The app will start on port 5000 by default for local development.
+   The app will start on port 80 by default (set `PORT` to override).
 
-See `SETUP_INSTRUCTIONS.md` for detailed setup and activation instructions.
+See `SETUP_INSTRUCTIONS.md` for detailed setup and activation instructions. For **Ubuntu**, see `DEPLOYMENT.md`.
 
 **Port Configuration**:
-- **Local Development**: Defaults to port 5000 (runs on `127.0.0.1`)
-- **Production**: Set `PORT=80` or `PORT=443` (runs on `0.0.0.0`)
+- **Local Development**: Uses `PORT` env (default 80); binds to `127.0.0.1`. The shared `ssh/deploy_config.json` is for deploy (server/user/password) only.
+- **Production (Ubuntu)**: Set `FLASK_ENV=production` and `PORT=80` (or run behind Nginx on 80; see DEPLOYMENT.md).
 
 The app automatically detects the environment based on `FLASK_ENV` or defaults to development mode.
 
@@ -127,30 +127,20 @@ For production deployment, you'll want to:
 export SECRET_KEY="your-secure-secret-key-here"
 ```
 
-2. **Run with a production WSGI server** (e.g., Gunicorn):
+2. **Run with a production WSGI server** (e.g., Gunicorn on Ubuntu/Linux):
 ```bash
 pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:80 run:app
+gunicorn -w 4 -b 0.0.0.0:80 app:app
 ```
+(Use `app:app` — the Flask app is in the `app` package.)
 
-3. **Set up systemd service** (example):
-```ini
-[Unit]
-Description=AppManager Gateway
-After=network.target
-
-[Service]
-Type=simple
-User=your-user
-WorkingDirectory=/path/to/AppManager
-Environment="SECRET_KEY=your-secret-key"
-ExecStart=/usr/bin/python3 /path/to/AppManager/run.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
+3. **Set up systemd service** (Ubuntu): Copy `deploy/appmanager.service` to `/etc/systemd/system/`, edit paths and `SECRET_KEY`, then:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable appmanager
+sudo systemctl start appmanager
 ```
+See `DEPLOYMENT.md` for full Ubuntu steps and port 80 options.
 
 4. **Configure Nginx** (if needed for HTTPS):
 ```nginx
@@ -196,7 +186,9 @@ AppManager/
 │   ├── admin_config.json    # Admin credentials
 │   ├── apps_config.json     # App configurations
 │   └── uploads/             # Uploaded logos
-├── run.py                   # Application entry point
+├── app.py                   # Application entry point
+├── deploy/
+│   └── appmanager.service   # Systemd unit for Ubuntu
 ├── requirements.txt         # Python dependencies
 └── README.md
 ```

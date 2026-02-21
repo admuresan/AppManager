@@ -114,7 +114,7 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/path/to/your/app
 Environment="PORT=5001"
-ExecStart=/usr/bin/python3 /path/to/your/app/run.py
+ExecStart=/usr/bin/python3 /path/to/your/app/app.py
 Restart=always
 RestartSec=10
 
