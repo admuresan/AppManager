@@ -11,120 +11,6 @@
         object-fit: contain;
     }
     
-    /* Terminal Styles */
-    .terminal-console {
-        background: #1e1e1e;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 30px;
-        color: #d4d4d4;
-        font-family: 'Courier New', monospace;
-    }
-    
-    .terminal-content {
-        background: #252526;
-        border-radius: 5px;
-        padding: 15px;
-        color: #d4d4d4;
-        font-family: 'Courier New', Courier, 'Liberation Mono', monospace;
-        font-size: 0.9em;
-        min-height: 400px;
-        max-height: 600px;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .terminal-output {
-        flex: 1;
-        overflow-y: auto;
-        padding: 15px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-    }
-    
-    .terminal-output::-webkit-scrollbar {
-        width: 10px;
-    }
-    
-    .terminal-output::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.05);
-    }
-    
-    .terminal-output::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 5px;
-    }
-    
-    .terminal-output::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .terminal-line {
-        margin: 2px 0;
-        padding: 2px 0;
-    }
-    
-    .terminal-line.command {
-        color: #4ec9b0;
-    }
-    
-    .terminal-line.output {
-        color: #d4d4d4;
-    }
-    
-    .terminal-line.error {
-        color: #f48771;
-    }
-    
-    .terminal-line.success {
-        color: #4ec9b0;
-    }
-    
-    .terminal-line.loading {
-        color: #808080;
-        font-style: italic;
-    }
-    
-    .terminal-input-line {
-        display: flex;
-        align-items: center;
-        padding: 10px 15px;
-        background: rgba(0, 0, 0, 0.3);
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .terminal-prompt {
-        color: #4ec9b0;
-        margin-right: 8px;
-        font-weight: bold;
-        user-select: none;
-    }
-    
-    .terminal-input {
-        flex: 1;
-        background: transparent;
-        border: none;
-        color: #d4d4d4;
-        font-family: 'Courier New', Courier, 'Liberation Mono', monospace;
-        font-size: 0.9em;
-        outline: none;
-        padding: 5px 0;
-    }
-    
-    .terminal-input:focus {
-        outline: none;
-    }
-    
-    .terminal-input::placeholder {
-        color: #808080;
-    }
-    
-    .terminal-input:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-    
     /* AppManager Log Panel - fixed at bottom, always visible */
     .admin-dashboard {
         padding-bottom: 48px;
@@ -245,8 +131,7 @@
         transform: rotate(90deg);
     }
     
-    .console-content.collapsed,
-    .terminal-content.collapsed {
+    .console-content.collapsed {
         display: none;
     }
     
@@ -604,23 +489,6 @@
         </div>
         <div id="ports-console-content" class="console-content collapsed">
             <p style="color: #808080; text-align: center; padding: 20px;">{{ t('admin_dashboard.loading_active_ports') }}</p>
-        </div>
-    </div>
-    
-    <!-- Terminal Console -->
-    <div class="terminal-console">
-        <div class="console-header collapsed" data-action="toggleConsole" data-console="terminal">
-            <h2><span class="chevron">▶</span>{{ t('admin_dashboard.server_terminal') }}</h2>
-            <div class="header-actions-group">
-                <button type="button" class="btn btn-secondary" data-action="clearTerminal">{{ t('admin_dashboard.clear') }}</button>
-            </div>
-        </div>
-        <div id="terminal-content" class="terminal-content collapsed">
-            <div id="terminal-output" class="terminal-output"></div>
-            <div class="terminal-input-line">
-                <span class="terminal-prompt" id="terminal-prompt-display">~$</span>
-                <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false" placeholder="{{ t('admin_dashboard.terminal_placeholder') }}">
-            </div>
         </div>
     </div>
     

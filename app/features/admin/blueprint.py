@@ -28,6 +28,7 @@ def handle_file_too_large(_e):
 
 
 # Import route modules for side-effects (decorators attach to bp).
+# Terminal routes (terminal_autocomplete, terminal_execute) are disabled - server terminal is off.
 from .routes import (  # noqa: E402,F401
     apps_api,
     auth,
@@ -35,8 +36,6 @@ from .routes import (  # noqa: E402,F401
     logs,
     pages,
     resources_api,
-    terminal_autocomplete,
-    terminal_execute,
     traffic_api,
     uploads,
 )
