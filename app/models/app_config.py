@@ -105,7 +105,7 @@ class AppConfig:
         return None
     
     @classmethod
-    def create(cls, name: str, port: int, logo: Optional[str] = None, service_name: Optional[str] = None, serve_app: bool = True, folder_path: Optional[str] = None) -> Dict:
+    def create(cls, name: str, port: int, logo: Optional[str] = None, service_name: Optional[str] = None, serve_app: bool = True, folder_path: Optional[str] = None, windows_path: Optional[str] = None, windows_start_command: Optional[str] = None) -> Dict:
         """Create a new app configuration"""
         apps = cls.get_all()
         
@@ -126,7 +126,9 @@ class AppConfig:
             'logo': logo,
             'service_name': service_name or f"app-{port}.service",
             'serve_app': serve_app,
-            'folder_path': folder_path
+            'folder_path': folder_path,
+            'windows_path': windows_path,
+            'windows_start_command': windows_start_command or 'python app.py',
         }
         
         apps.append(app_config)
@@ -137,7 +139,7 @@ class AppConfig:
         return app_config
     
     @classmethod
-    def update(cls, app_id: str, name: str = None, port: int = None, logo: str = None, service_name: str = None, serve_app: bool = None, folder_path: str = None) -> Optional[Dict]:
+    def update(cls, app_id: str, name: str = None, port: int = None, logo: str = None, service_name: str = None, serve_app: bool = None, folder_path: str = None, windows_path: str = None, windows_start_command: str = None) -> Optional[Dict]:
         """Update an existing app configuration"""
         apps = cls.get_all()
         
@@ -164,6 +166,10 @@ class AppConfig:
                     app['serve_app'] = serve_app
                 if folder_path is not None:
                     app['folder_path'] = folder_path
+                if windows_path is not None:
+                    app['windows_path'] = windows_path
+                if windows_start_command is not None:
+                    app['windows_start_command'] = windows_start_command
                 
                 config = cls._load_config()
                 config['apps'] = apps

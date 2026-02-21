@@ -3,20 +3,21 @@ Utility functions for managing apps.
 
 IMPORTANT: Read `instructions/architecture` before making changes.
 """
+import os
+import platform
+import re
 import socket
 import subprocess
-import psutil
-import os
-import re
-import platform
+import time
+from pathlib import Path
 
-# NOTE: Port configuration utilities were extracted to keep this module focused.
-# Re-exported here for backward compatibility with existing imports.
-from app.utils.port_configuration import (  # noqa: E402
-    configure_firewall_port,
-    configure_firewall_port_detailed,
-    is_server_environment,
-)
+import psutil
+
+def _log_startup_step(step: str):
+    """Log startup step so it appears in terminal and AppManager log file."""
+    import sys
+    print(f"[AppManager] {step}", flush=True, file=sys.stderr)
+
 
 def test_app_port(port):
     """Test if an app is listening on a specific port"""
@@ -90,91 +91,416 @@ def check_port_status(port):
     
     return result
 
-def start_app_service(service_name):
-    """Start a systemd service"""
-    try:
-        # Try to start the service using systemctl
-        result = subprocess.run(
-            ['sudo', 'systemctl', 'start', service_name],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            return True, f"Service {service_name} started successfully"
-        else:
-            return False, f"Failed to start service: {result.stderr}"
-    except subprocess.TimeoutExpired:
-        return False, "Service start timed out"
-    except FileNotFoundError:
-        return False, "systemctl not available"
-    except Exception as e:
-        return False, f"Error starting service: {str(e)}"
+def _find_venv_python(app_path: Path, venv_name: str = None) -> Path:
+    """Find Python executable in a venv. Returns Path or None."""
+    if platform.system() == "Windows":
+        candidates = [venv_name] if venv_name else ['venv', '.venv', 'env']
+        for name in candidates:
+            py_path = app_path / name / 'Scripts' / 'python.exe'
+            if py_path.exists():
+                return py_path
+    else:
+        # Linux: venv/bin/python
+        candidates = [venv_name] if venv_name else ['venv', '.venv', 'env']
+        for name in candidates:
+            py_path = app_path / name / 'bin' / 'python'
+            if py_path.exists():
+                return py_path
+        # Also check *_venv pattern
+        if app_path.is_dir():
+            for item in app_path.iterdir():
+                if item.is_dir() and (item.name.endswith('_venv') or item.name.endswith('venv')):
+                    py_path = item / 'bin' / 'python'
+                    if py_path.exists():
+                        return py_path
+    return None
 
-def stop_app_service(service_name):
-    """Stop a systemd service"""
-    try:
-        # Try to stop the service using systemctl
-        result = subprocess.run(
-            ['sudo', 'systemctl', 'stop', service_name],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            return True, f"Service {service_name} stopped successfully"
-        else:
-            return False, f"Failed to stop service: {result.stderr}"
-    except subprocess.TimeoutExpired:
-        return False, "Service stop timed out"
-    except FileNotFoundError:
-        return False, "systemctl not available"
-    except Exception as e:
-        return False, f"Error stopping service: {str(e)}"
 
-def restart_app_service(service_name):
-    """Restart a systemd service"""
+def _venv_requirements_match(app_path: Path, venv_dir: Path) -> bool:
+    """Check if venv's installed requirements match app's requirements.txt."""
+    app_req = app_path / 'requirements.txt'
+    if not app_req.exists():
+        return True  # No requirements to compare
+    venv_req = venv_dir / 'requirements.txt'
+    if not venv_req.exists():
+        venv_req = venv_dir / 'requirements_installed.txt'
+    if not venv_req.exists():
+        return False
     try:
-        # Try to restart the service using systemctl
-        result = subprocess.run(
-            ['sudo', 'systemctl', 'restart', service_name],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            return True, f"Service {service_name} restarted successfully"
-        else:
-            return False, f"Failed to restart service: {result.stderr}"
-    except subprocess.TimeoutExpired:
-        return False, "Service restart timed out"
-    except FileNotFoundError:
-        # systemctl not available, try alternative method
-        return restart_app_by_port(service_name)
-    except Exception as e:
-        return False, f"Error restarting service: {str(e)}"
+        return open(app_req, 'rb').read() == open(venv_req, 'rb').read()
+    except Exception:
+        return False
 
-def restart_app_by_port(service_name):
-    """Alternative method: find and restart process by port (fallback)"""
-    # Extract port from service name if possible
-    # This is a fallback if systemctl is not available
-    try:
-        # Try to find process by service name pattern
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+
+def _ensure_venv_and_deps(app_path: Path, venv_name: str = None) -> tuple:
+    """
+    Ensure a virtual environment exists and dependencies are installed.
+    Returns (python_exe_path, message) - path is None on failure.
+    """
+    if platform.system() != 'Windows':
+        return None, "Only supported on Windows"
+
+    # 1. Find existing venv
+    py_path = _find_venv_python(app_path, venv_name)
+    created = False
+
+    if not py_path:
+        # 2. Create venv (use 'venv' as default folder name)
+        _log_startup_step("Creating venv...")
+        target_name = venv_name or 'venv'
+        venv_dir = app_path / target_name
+        try:
+            # Prefer py -m venv (Python launcher) then python -m venv
+            for cmd in [['py', '-3', '-m', 'venv', target_name], ['python', '-m', 'venv', target_name]]:
+                result = subprocess.run(
+                    cmd,
+                    cwd=str(app_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode == 0:
+                    created = True
+                    py_path = _find_venv_python(app_path, target_name)
+                    if py_path:
+                        break
+        except subprocess.TimeoutExpired:
+            return None, "Virtual environment creation timed out"
+        except Exception as e:
+            return None, f"Failed to create venv: {e}"
+
+        if not py_path:
+            return None, "Virtual environment was created but python.exe not found"
+
+    # 3. Install requirements if present
+    req_files = [app_path / 'requirements.txt', app_path / 'app' / 'requirements.txt']
+    for req_file in req_files:
+        if req_file.exists():
+            _log_startup_step("Installing requirements...")
             try:
-                cmdline = proc.info.get('cmdline', [])
-                if cmdline and service_name in ' '.join(cmdline):
-                    proc.terminate()
-                    proc.wait(timeout=5)
-                    return True, f"Process restarted (PID: {proc.info['pid']})"
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
-                continue
-        return False, "Could not find process to restart"
+                subprocess.run(
+                    [str(py_path), '-m', 'pip', 'install', '-r', str(req_file), '-q'],
+                    cwd=str(app_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+            except subprocess.TimeoutExpired:
+                pass  # Non-fatal; app might still run
+            except Exception:
+                pass  # Non-fatal
+            break
+
+    return py_path, "Venv ready" if created else "Using existing venv"
+
+
+def _ensure_venv_and_deps_linux(app_path: Path, venv_name: str = None) -> tuple:
+    """
+    Ensure a virtual environment exists on Linux, deps match requirements.txt.
+    If no venv or requirements mismatch: create venv, install deps, copy requirements.txt into venv.
+    Returns (python_exe_path, message) - path is None on failure.
+    """
+    if platform.system() != 'Linux':
+        return None, "Only supported on Linux"
+
+    py_path = _find_venv_python(app_path, venv_name)
+    venv_dir = py_path.parent.parent if py_path else None
+    recreate = False
+
+    if py_path and venv_dir:
+        if not _venv_requirements_match(app_path, venv_dir):
+            recreate = True
+    else:
+        recreate = True
+
+    if recreate:
+        _log_startup_step("No venv or requirements mismatch; creating venv and installing requirements...")
+    else:
+        _log_startup_step("Found venv with matching requirements.")
+
+    if recreate:
+        _log_startup_step("Creating venv...")
+        # Remove old venv if exists
+        for name in ['venv', '.venv', 'env']:
+            vd = app_path / name
+            if vd.exists():
+                try:
+                    import shutil
+                    shutil.rmtree(vd)
+                except Exception:
+                    pass
+                break
+        # Create venv
+        target_name = venv_name or 'venv'
+        try:
+            for cmd in [['python3', '-m', 'venv', target_name], ['python', '-m', 'venv', target_name]]:
+                r = subprocess.run(cmd, cwd=str(app_path), capture_output=True, text=True, timeout=120)
+                if r.returncode == 0:
+                    py_path = _find_venv_python(app_path, target_name)
+                    venv_dir = app_path / target_name
+                    break
+        except subprocess.TimeoutExpired:
+            return None, "Virtual environment creation timed out"
+        except Exception as e:
+            return None, f"Failed to create venv: {e}"
+
+        if not py_path:
+            return None, "Virtual environment was created but python not found"
+
+        # Install requirements
+        req_file = app_path / 'requirements.txt'
+        if not req_file.exists():
+            req_file = app_path / 'app' / 'requirements.txt'
+        if req_file.exists():
+            _log_startup_step("Installing requirements...")
+            try:
+                subprocess.run(
+                    [str(py_path), '-m', 'pip', 'install', '-r', str(req_file), '-q'],
+                    cwd=str(app_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+            except subprocess.TimeoutExpired:
+                pass
+            except Exception:
+                pass
+        # Copy requirements.txt into venv folder
+        src_req = app_path / 'requirements.txt'
+        if src_req.exists():
+            try:
+                import shutil
+                shutil.copy(src_req, venv_dir / 'requirements.txt')
+            except Exception:
+                pass
+
+    return py_path, "Venv ready" if recreate else "Using existing venv"
+
+
+def start_app_linux(
+    folder_path: str,
+    start_command: str = "python app.py",
+    port: int = None,
+    app_id: str = None,
+    instance_path: str = None,
+) -> tuple:
+    """
+    Start an app in the background on Linux.
+    Checks for venv, creates/updates if requirements mismatch, then launches with FLASK_ENV=production.
+    If app_id and instance_path are provided, stdout/stderr are captured to instance/logs/apps/{app_id}.log.
+    """
+    if platform.system() != 'Linux':
+        return False, "Linux start is only available on Linux"
+
+    folder_path = (folder_path or "").strip()
+    if not folder_path:
+        return False, "App folder path is not configured for this app"
+
+    path = Path(folder_path)
+    if not path.exists():
+        return False, f"Folder does not exist: {folder_path}"
+    if not path.is_dir():
+        return False, f"Path is not a directory: {folder_path}"
+
+    start_command = (start_command or "python app.py").strip()
+    if not start_command:
+        return False, "Start command is empty"
+
+    py_path, venv_msg = _ensure_venv_and_deps_linux(path, venv_name=None)
+    if py_path is None:
+        return False, venv_msg
+
+    _log_startup_step("Running app.py...")
+    venv_bin = str(py_path.parent)
+    venv_root = str(py_path.parent.parent)
+    env = {
+        'PATH': venv_bin,
+        'VIRTUAL_ENV': venv_root,
+        'FLASK_ENV': 'production',
+    }
+    if port is not None:
+        env['PORT'] = str(port)
+        env['SERVER_PORT'] = str(port)
+    if 'HOME' in os.environ:
+        env['HOME'] = os.environ['HOME']
+
+    # Resolve command: use venv python with -u for unbuffered (real-time) logs
+    if start_command.strip().startswith('python ') or start_command.strip().startswith('python3 '):
+        rest = start_command.split()[1:]
+        cmd_args = [str(py_path), '-u'] + rest
+    else:
+        cmd_args = ['/bin/sh', '-c', start_command]
+
+    stdout_err = subprocess.DEVNULL
+    stderr_err = subprocess.DEVNULL
+    opened_log = None
+    if app_id and instance_path:
+        logs_dir = Path(instance_path) / "logs" / "apps"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / f"{app_id}.log"
+        try:
+            opened_log = open(log_path, "a", encoding="utf-8")
+            opened_log.write(f"[AppManager] Starting process at {time.strftime('%Y-%m-%d %H:%M:%S')} ...\n")
+            opened_log.flush()
+            stdout_err = opened_log
+            stderr_err = subprocess.STDOUT
+        except Exception:
+            pass
+
+    try:
+        if len(cmd_args) == 1:
+            proc = subprocess.Popen(
+                cmd_args,
+                cwd=str(path.resolve()),
+                env=env,
+                stdout=stdout_err,
+                stderr=stderr_err,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        else:
+            proc = subprocess.Popen(
+                cmd_args,
+                cwd=str(path.resolve()),
+                env=env,
+                stdout=stdout_err,
+                stderr=stderr_err,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        if opened_log:
+            try:
+                opened_log.write(f"[AppManager] Process started (PID: {proc.pid})\n")
+                opened_log.flush()
+            except Exception:
+                pass
+            opened_log.close()
+
+        if port is not None:
+            for attempt in range(4):
+                time.sleep(2)
+                if test_app_port(port):
+                    _log_startup_step("Port is listening.")
+                    return True, f"App started (PID: {proc.pid}, port {port} ready)"
+            _log_startup_step("Port did not come up within 8s.")
+            return False, "App process started but port did not come up within 8 seconds"
+        return True, f"App started in background (PID: {proc.pid})"
     except Exception as e:
-        return False, f"Error finding process: {str(e)}"
+        return False, f"Failed to start app: {str(e)}"
+
+
+def start_app_windows(
+    folder_path: str,
+    start_command: str = "python app.py",
+    port: int = None,
+    app_id: str = None,
+    instance_path: str = None,
+) -> tuple:
+    """
+    Start an app in the background on Windows.
+    Ensures a virtual environment exists (creates one if not), installs requirements.txt if present,
+    then runs the start_command in the given folder_path as a detached process.
+    If app_id and instance_path are provided, stdout/stderr are captured to instance/logs/apps/{app_id}.log.
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    if platform.system() != 'Windows':
+        return False, "Windows start is only available on Windows"
+
+    folder_path = (folder_path or "").strip()
+    if not folder_path:
+        return False, "Windows path is not configured for this app"
+
+    path = Path(folder_path)
+    if not path.exists():
+        return False, f"Folder does not exist: {folder_path}"
+    if not path.is_dir():
+        return False, f"Path is not a directory: {folder_path}"
+
+    start_command = (start_command or "python app.py").strip()
+    if not start_command:
+        return False, "Start command is empty"
+
+    _log_startup_step("Checking venv and dependencies...")
+    py_path, venv_msg = _ensure_venv_and_deps(path, venv_name=None)
+    if py_path is None:
+        return False, venv_msg
+
+    _log_startup_step("Running app.py...")
+    scripts_dir = py_path.parent
+    env = {
+        'PATH': str(scripts_dir),
+        'VIRTUAL_ENV': str(scripts_dir.parent),
+        'FLASK_ENV': 'production',
+    }
+    if port is not None:
+        env['PORT'] = str(port)
+        env['SERVER_PORT'] = str(port)
+    if 'HOME' in os.environ:
+        env['HOME'] = os.environ['HOME']
+    if 'SYSTEMROOT' in os.environ:
+        env['SYSTEMROOT'] = os.environ['SYSTEMROOT']
+
+    # Use -u for unbuffered (real-time) logs
+    run_cmd = start_command.strip()
+    if run_cmd.startswith('python ') or run_cmd.startswith('python3 '):
+        parts = run_cmd.split(None, 1)
+        run_cmd = parts[0] + ' -u ' + (parts[1] if len(parts) > 1 else '')
+
+    stdout_err = subprocess.DEVNULL
+    stderr_err = subprocess.DEVNULL
+    opened_log = None
+    if app_id and instance_path:
+        logs_dir = Path(instance_path) / "logs" / "apps"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / f"{app_id}.log"
+        try:
+            opened_log = open(log_path, "a", encoding="utf-8")
+            opened_log.write(f"[AppManager] Starting process at {time.strftime('%Y-%m-%d %H:%M:%S')} ...\n")
+            opened_log.flush()
+            stdout_err = opened_log
+            stderr_err = subprocess.STDOUT
+        except Exception:
+            pass
+
+    try:
+        creation_flags = 0
+        if hasattr(subprocess, 'CREATE_NO_WINDOW'):
+            creation_flags = subprocess.CREATE_NO_WINDOW
+        elif hasattr(subprocess, 'DETACHED_PROCESS'):
+            creation_flags = subprocess.DETACHED_PROCESS
+
+        proc = subprocess.Popen(
+            run_cmd,
+            cwd=str(path.resolve()),
+            shell=True,
+            env=env,
+            stdout=stdout_err,
+            stderr=stderr_err,
+            stdin=subprocess.DEVNULL,
+            creationflags=creation_flags,
+        )
+        if opened_log:
+            try:
+                opened_log.write(f"[AppManager] Process started (PID: {proc.pid})\n")
+                opened_log.flush()
+            except Exception:
+                pass
+            opened_log.close()
+
+        if port is not None:
+            for attempt in range(4):
+                time.sleep(2)
+                if test_app_port(port):
+                    _log_startup_step("Port is listening.")
+                    return True, f"App started (PID: {proc.pid}, port {port} ready)"
+            _log_startup_step("Port did not come up within 8s.")
+            return False, "App process started but port did not come up within 8 seconds"
+        return True, f"App started in background (PID: {proc.pid})"
+    except Exception as e:
+        return False, f"Failed to start app: {str(e)}"
+
 
 def detect_service_name_by_port(port):
     """
@@ -539,10 +865,6 @@ def get_active_ports_and_services():
     
     return active_ports
 
-#
-# Port configuration helpers live in `app.utils.port_configuration`.
-# (See imports near the top of this file.)
-
 def get_app_logs(service_name, lines=500, since=None, until=None):
     """
     Get logs from systemd journalctl for a given service.
@@ -564,23 +886,19 @@ def get_app_logs(service_name, lines=500, since=None, until=None):
         return False, "Service name is required to view logs", None, None
     
     try:
-        # Build journalctl command
-        cmd = ['sudo', 'journalctl', '-u', service_name, '--no-pager']
+        # Build journalctl command (without sudo to avoid password prompts)
+        cmd = ['journalctl', '-u', service_name, '--no-pager']
         
-        # Add timestamp filters if provided
         if since:
             cmd.extend(['--since', since])
         if until:
             cmd.extend(['--until', until])
         
-        # If no timestamps, use -n for last N lines
         if not since and not until:
             cmd.extend(['-n', str(lines)])
         else:
-            # When using timestamps, limit output
             cmd.extend(['-n', str(lines)])
         
-        # Use --output=short-iso for consistent timestamp format
         cmd.append('--output=short-iso')
         
         result = subprocess.run(
@@ -595,28 +913,13 @@ def get_app_logs(service_name, lines=500, since=None, until=None):
             oldest_ts, newest_ts = _extract_timestamps_from_logs(logs)
             return True, logs, oldest_ts, newest_ts
         else:
-            # Try without sudo if that fails
-            cmd[0] = 'journalctl'
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            if result.returncode == 0:
-                logs = result.stdout
-                oldest_ts, newest_ts = _extract_timestamps_from_logs(logs)
-                return True, logs, oldest_ts, newest_ts
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            if "Permission denied" in error_msg or "Access denied" in error_msg:
+                return False, f"Permission denied. Add user to systemd-journal group: sudo usermod -aG systemd-journal $USER", None, None
+            elif "No entries" in error_msg or "No journal files" in error_msg:
+                return False, f"No logs found for service '{service_name}'. The service may not exist or have no log entries.", None, None
             else:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                # Provide helpful error messages for common issues
-                if "Permission denied" in error_msg or "Access denied" in error_msg:
-                    return False, f"Permission denied accessing logs. The AppManager user needs sudo access or membership in systemd-journal group. Error: {error_msg}", None, None
-                elif "No entries" in error_msg or "No journal files" in error_msg:
-                    return False, f"No logs found for service '{service_name}'. The service may not exist or have no log entries.", None, None
-                else:
-                    return False, f"Failed to retrieve logs: {error_msg}", None, None
+                return False, f"Failed to retrieve logs: {error_msg}", None, None
     
     except subprocess.TimeoutExpired:
         return False, "Log retrieval timed out", None, None
@@ -624,6 +927,53 @@ def get_app_logs(service_name, lines=500, since=None, until=None):
         return False, "journalctl command not found (systemd not available)", None, None
     except Exception as e:
         return False, f"Error retrieving logs: {str(e)}", None, None
+
+def get_app_logs_from_file(app_id: str, instance_path: str, lines: int = 500) -> tuple:
+    """
+    Read logs for an app started via folder (not systemd) from instance/logs/apps/{app_id}.log.
+    Returns (success, logs_or_error, oldest_ts, newest_ts).
+    """
+    if not app_id or not instance_path:
+        return False, "App ID and instance path required", None, None
+    log_path = Path(instance_path) / "logs" / "apps" / f"{app_id}.log"
+    if not log_path.exists():
+        return False, "No log file yet. Start the app from the dashboard to capture logs.", None, None
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+        if not all_lines:
+            return True, "", None, None
+        result_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        logs = "".join(result_lines).rstrip()
+        oldest_ts, newest_ts = _extract_timestamps_from_logs(logs)
+        return True, logs, oldest_ts, newest_ts
+    except Exception as e:
+        return False, str(e), None, None
+
+
+def get_appmanager_logs_from_file(instance_path: str, lines: int = 300) -> tuple:
+    """
+    Read AppManager logs from instance/logs/appmanager.log (used when not running as systemd).
+    Returns (success, logs_or_error, oldest_ts, newest_ts).
+    """
+    if not instance_path:
+        return False, "Instance path required", None, None
+    log_path = Path(instance_path) / "logs" / "appmanager.log"
+    if not log_path.exists():
+        return False, f"Log file not found at {log_path}. Restart AppManager from its project directory (e.g. python app.py).", None, None
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+        if not all_lines:
+            return True, "", None, None
+        # Return last N lines (newest first in file = at end)
+        result_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        logs = "".join(result_lines).rstrip()
+        oldest_ts, newest_ts = _extract_timestamps_from_logs(logs)
+        return True, logs, oldest_ts, newest_ts
+    except Exception as e:
+        return False, str(e), None, None
+
 
 def _extract_timestamps_from_logs(logs):
     """

@@ -3,6 +3,7 @@ Admin HTML page routes (dashboard, OCI config page).
 
 IMPORTANT: Read `instructions/architecture` before making changes.
 """
+import platform
 
 from flask import current_app, render_template, request
 from flask_login import login_required
@@ -32,12 +33,6 @@ def dashboard():
         pass  # Don't fail if tracking fails
 
     apps = AppConfig.get_all()
-    return render_template("admin/dashboard.html", apps=apps)
-
-
-@bp.route("/oci")
-@login_required
-def oci_config():
-    """OCI configuration page."""
-    return render_template("admin/oci.html")
+    is_windows = platform.system() == "Windows"
+    return render_template("admin/dashboard.html", apps=apps, is_windows=is_windows)
 

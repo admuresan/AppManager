@@ -474,6 +474,46 @@ body {
     gap: 20px;
 }
 
+.app-status {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.8em;
+    font-weight: 600;
+    min-width: 72px;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+}
+
+.app-status.status-started {
+    color: #1a472a;
+    background: #4ade80;
+    border-color: rgba(74, 222, 128, 0.5);
+}
+
+.app-status.status-stopped {
+    color: #fff;
+    background: #ef4444;
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.app-status.status-starting,
+.app-status.status-stopping {
+    color: #854d0e;
+    background: #facc15;
+    border-color: rgba(250, 204, 21, 0.5);
+    font-style: italic;
+}
+
+.discovered-action-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+}
+
 .app-info {
     display: flex;
     align-items: center;
@@ -542,6 +582,10 @@ body {
 
 .app-actions {
     position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
 }
 
 .btn-icon {
@@ -577,8 +621,10 @@ body {
     border-radius: 8px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
     min-width: 150px;
-    z-index: 10000;
+    z-index: 100000;
     margin-top: 5px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
 }
 
 .dropdown-menu a {
@@ -904,6 +950,17 @@ body {
     font-weight: bold;
 }
 
+/* App name links in Discovered Apps: match console palette, no clashing blue */
+.console-content .port-number a {
+    color: #7dd3c0;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.console-content .port-number a:hover {
+    color: #9ee5d8;
+    text-decoration: underline;
+}
+
 .service-name {
     color: #dcdcaa;
 }
@@ -941,6 +998,18 @@ body {
 
 .btn-add-port:active {
     transform: scale(0.95);
+}
+
+/* Discovered apps action: subtle ellipsis, matches theme */
+.btn-add-discovered {
+    background: none;
+    color: #b0b0b0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-add-discovered:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
 }
 
 .alert-banner {

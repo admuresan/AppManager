@@ -19,8 +19,8 @@
         <!-- Other Apps -->
         {% for app in apps %}
         <div class="app-card">
-            {# Use the select route which handles nginx configuration and port mapping correctly #}
-            <a href="{{ url_for('welcome.select_app', app_id=app.id) }}" class="app-link" target="_blank">
+            {# Direct link to app on its port #}
+            <a href="http://{{ server_address }}:{{ app.port }}" class="app-link" target="_blank">
                 {% if app.logo %}
                     {# Strip 'uploads/' prefix if present since route already includes it #}
                     {% set logo_filename = app.logo.replace('uploads/', '', 1) if app.logo.startswith('uploads/') else app.logo %}

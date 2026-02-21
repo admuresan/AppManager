@@ -140,21 +140,24 @@ def _get_app_process_pids(app_config):
     return list(pids)
 
 
-@bp.route("/api/opt-folders", methods=["GET"])
+@bp.route("/api/app-folders", methods=["GET"])
 @login_required
-def get_opt_folders():
-    """Get list of folders in /opt directory."""
+def get_app_folders():
+    """Get list of folders in /BlackGrid directory (suggested app locations)."""
     try:
         from pathlib import Path
 
-        opt_path = Path("/opt")
+        base_paths = [Path("/BlackGrid"), Path("/opt")]
         folders = []
 
-        if opt_path.exists() and opt_path.is_dir():
-            for item in opt_path.iterdir():
-                if item.is_dir():
-                    if not item.name.startswith(".") and item.name not in ["lost+found"]:
-                        folders.append(item.name)
+        for base in base_paths:
+            if base.exists() and base.is_dir():
+                for item in base.iterdir():
+                    if item.is_dir():
+                        if not item.name.startswith(".") and item.name not in ["lost+found"]:
+                            full = str(base / item.name)
+                            if full not in folders:
+                                folders.append(full)
 
         folders.sort()
         return jsonify({"success": True, "folders": folders})
@@ -265,7 +268,7 @@ def get_resource_stats():
                     }
                 )
 
-        appmanager_disk_path = "/opt/appmanager"
+        appmanager_disk_path = "/BlackGrid/appmanager"
         appmanager_disk_bytes = _get_directory_size(appmanager_disk_path)
         appmanager_disk_gb = round(appmanager_disk_bytes / (1024**3), 2)
 

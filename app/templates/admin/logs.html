@@ -311,9 +311,7 @@
         <div class="logs-error">
             <h3>{{ t('logs.error_heading') }}</h3>
             <p>{{ error }}</p>
-            {% if not service_name %}
-            <p><strong>Note:</strong> To view logs, please configure a service name for this app in the Edit dialog.</p>
-            {% endif %}
+            <p><strong>Note:</strong> Logs are captured when you start the app from the dashboard. Start the app first, then refresh.</p>
         </div>
         {% elif logs %}
         <div class="logs-content-wrapper" id="logs-wrapper">

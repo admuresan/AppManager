@@ -57,15 +57,15 @@ def _resolve_app_root(app_cfg: dict) -> Path | None:
         if fp.is_absolute():
             candidates.append(fp)
         else:
-            candidates.append(Path("/opt") / folder_path)
+            candidates.append(Path("/BlackGrid") / folder_path)
             candidates.append(_workspace_root() / folder_path)
 
     if slug:
-        candidates.append(Path("/opt") / slug)
+        candidates.append(Path("/BlackGrid") / slug)
         candidates.append(_workspace_root() / slug)
 
     if name:
-        candidates.append(Path("/opt") / name)
+        candidates.append(Path("/BlackGrid") / name)
         candidates.append(_workspace_root() / name)
 
     seen: set[str] = set()

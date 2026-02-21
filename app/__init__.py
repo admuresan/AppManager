@@ -3,15 +3,60 @@ AppManager - Gateway application for managing multiple Flask apps.
 
 IMPORTANT: Read `instructions/architecture` before making changes.
 """
+import logging
+import sys
+from pathlib import Path
+
+import os
 from flask import Flask
 from flask_login import LoginManager
-import os
-from pathlib import Path
 
 # Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.login_view = 'admin.login'
 login_manager.login_message = 'Please log in to access the admin panel.'
+
+def _setup_log_file_tee(instance_path: Path):
+    """Tee stderr and add log file handler so AppManager logs panel captures all output when not running as systemd."""
+    log_path = instance_path / "logs" / "appmanager.log"
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_path, "a", encoding="utf-8")
+        log_file.write("\n")
+        log_file.flush()
+        orig_stderr = sys.stderr
+        # 1. Tee stderr so direct writes (print, etc.) go to both terminal and file
+        class _TeeStderr:
+            def write(self, data):
+                try:
+                    orig_stderr.write(data)
+                    log_file.write(data)
+                except Exception:
+                    pass
+            def flush(self):
+                try:
+                    orig_stderr.flush()
+                    log_file.flush()
+                except Exception:
+                    pass
+            def writable(self):
+                return True
+            def fileno(self):
+                return orig_stderr.fileno()
+            def isatty(self):
+                return getattr(orig_stderr, "isatty", lambda: False)()
+        sys.stderr = _TeeStderr()
+        # 2. Add FileHandler to root logger so all logging (Werkzeug, Flask, etc.) goes to file
+        file_handler = logging.StreamHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter("%(name)s:%(levelname)s:%(message)s"))
+        logging.getLogger().addHandler(file_handler)
+        msg = f"[AppManager] Logs will be captured to {log_path}\n"
+        sys.stderr.write(msg)
+        sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"[AppManager] Warning: Could not set up log file at {log_path}: {e}\n")
+
 
 def create_app():
     """Create and configure the Flask application"""
@@ -55,6 +100,10 @@ def create_app():
     instance_path = Path(app.instance_path)
     instance_path.mkdir(exist_ok=True)
     (instance_path / 'uploads' / 'logos').mkdir(parents=True, exist_ok=True)
+    (instance_path / 'logs').mkdir(exist_ok=True)
+    
+    # Capture stderr to log file so AppManager logs panel works when not running as systemd
+    _setup_log_file_tee(instance_path)
     
     # Initialize Flask-Login
     login_manager.init_app(app)
@@ -145,12 +194,10 @@ def create_app():
         abort(404)
     
     # Register blueprints
-    from app.routes import welcome, admin, docs, proxy
+    from app.routes import welcome, admin, docs
     app.register_blueprint(welcome.bp)  # /blackgrid/
     app.register_blueprint(admin.bp)    # /blackgrid/admin/
     app.register_blueprint(docs.bp)     # /blackgrid/docs
-    # Proxy must be registered last (broad catch-all routes).
-    app.register_blueprint(proxy.bp)
 
     # Inject text/content helper into templates.
     from app.utils.content import t as _t
@@ -206,53 +253,22 @@ def create_app():
             
             from app.models.app_config import AppConfig
             
-            # Check if this is a proxied app (not /blackgrid/)
-            if request.blueprint == 'proxy':
-                # Extract app slug from path
-                path_parts = request.path.strip('/').split('/')
-                if path_parts:
-                    app_slug = path_parts[0]
-                    # Skip if it's blackgrid (shouldn't happen, but defensive)
-                    if app_slug != 'blackgrid':
-                        try:
-                            app_config = AppConfig.get_by_slug(app_slug)
-                            if app_config:
-                                # This is a mapped/proxied app - use its actual name
-                                app_name = app_config.get('name', app_slug)
-                            else:
-                                # Unmapped proxy route - group with App Manager
-                                app_name = 'App Manager'
-                        except:
-                            # Error looking up app - group with App Manager
-                            app_name = 'App Manager'
-            else:
-                # Check if request is coming to AppManager on a port that matches an app
-                # This handles cases where apps might be accessed through AppManager's port
-                # (though typically direct port access goes to the app itself, not AppManager)
-                try:
-                    # Extract port from Host header (e.g., "blackgrid.ddns.net:6006")
-                    host_header = request.host
-                    if ':' in host_header:
-                        port_str = host_header.split(':')[1]
-                        try:
-                            port = int(port_str)
-                            # Check if this port matches any configured app
-                            app_config = AppConfig.get_by_port(port)
-                            if app_config:
-                                # Determine if HTTPS or HTTP based on request
-                                is_https = request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https'
-                                app_base_name = app_config.get('name', 'Unknown App')
-                                # Format: "AppName :port" or "AppName https :port"
-                                if is_https:
-                                    app_name = f"{app_base_name} https :{port}"
-                                else:
-                                    app_name = f"{app_base_name} :{port}"
-                        except (ValueError, TypeError):
-                            # Port is not a valid integer, ignore
-                            pass
-                except Exception:
-                    # Error extracting port, fall back to default
-                    pass
+            # Check if request is on a port that matches an app (for traffic grouping)
+            try:
+                host_header = request.host
+                if ':' in host_header:
+                    port_str = host_header.split(':')[1]
+                    try:
+                        port = int(port_str)
+                        app_config = AppConfig.get_by_port(port)
+                        if app_config:
+                            is_https = request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https'
+                            app_base_name = app_config.get('name', 'Unknown App')
+                            app_name = f"{app_base_name} https :{port}" if is_https else f"{app_base_name} :{port}"
+                    except (ValueError, TypeError):
+                        pass
+            except Exception:
+                pass
             
             # All other routes (welcome, admin, etc.) are grouped as "App Manager"
             # No need for elif - app_name already defaults to 'App Manager'

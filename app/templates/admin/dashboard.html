@@ -125,6 +125,103 @@
         cursor: not-allowed;
     }
     
+    /* AppManager Log Panel - fixed at bottom, always visible */
+    .admin-dashboard {
+        padding-bottom: 48px;
+    }
+    .appmanager-log-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 900;
+        background: #1e1e1e;
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        min-height: 40px;
+        max-height: 70vh;
+    }
+    .appmanager-log-panel.collapsed .appmanager-log-content {
+        display: none;
+    }
+    .appmanager-log-panel.collapsed .appmanager-log-resize-handle {
+        display: none;
+    }
+    .appmanager-log-panel:not(.collapsed) {
+        height: var(--appmanager-log-height, 280px);
+    }
+    .appmanager-log-panel.collapsed .appmanager-log-toggle::after {
+        content: '▲';
+    }
+    .appmanager-log-panel:not(.collapsed) .appmanager-log-toggle::after {
+        content: '▼';
+    }
+    .appmanager-log-resize-handle {
+        height: 6px;
+        cursor: ns-resize;
+        background: transparent;
+        flex-shrink: 0;
+    }
+    .appmanager-log-resize-handle:hover {
+        background: rgba(102, 126, 234, 0.3);
+    }
+    .appmanager-log-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 8px 15px;
+        background: rgba(0, 0, 0, 0.2);
+        flex-shrink: 0;
+    }
+    .appmanager-log-title {
+        font-weight: 600;
+        color: #d4d4d4;
+    }
+    .appmanager-log-filter {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.9em;
+        color: #9ca3af;
+        cursor: pointer;
+    }
+    .appmanager-log-filter input {
+        cursor: pointer;
+    }
+    .appmanager-log-refresh {
+        padding: 4px 10px;
+        font-size: 0.85em;
+    }
+    .appmanager-log-toggle {
+        margin-left: auto;
+        background: none;
+        border: none;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 4px 8px;
+        font-size: 1em;
+    }
+    .appmanager-log-toggle:hover {
+        color: #d4d4d4;
+    }
+    .appmanager-log-content {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+        padding: 12px 15px;
+    }
+    .appmanager-log-content pre {
+        margin: 0;
+        font-family: 'Courier New', Consolas, monospace;
+        font-size: 0.82em;
+        line-height: 1.4;
+        color: #d4d4d4;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    
     /* Collapsible Console Styles */
     .console-header {
         cursor: pointer;
@@ -416,6 +513,44 @@
     .traffic-filter-checkbox span {
         white-space: nowrap;
     }
+    .config-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .config-row input {
+        flex: 1;
+        padding: 8px;
+    }
+    .empty-placeholder {
+        color: #666;
+        font-style: italic;
+    }
+    .console-loading, .console-empty {
+        color: #808080;
+        text-align: center;
+        padding: 20px;
+    }
+    .console-error {
+        color: #dc3545;
+        text-align: center;
+        padding: 20px;
+    }
+    .form-row-with-btn .form-row-inputs {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+    .form-row-with-btn .form-row-inputs input {
+        flex: 1;
+    }
+    .modal-form-simple .form-group small {
+        display: block;
+        margin-top: 4px;
+        color: #808080;
+        font-size: 0.85em;
+    }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -426,82 +561,37 @@
         <h1>{{ t('admin_dashboard.heading') }}</h1>
         <div class="header-actions">
             <a href="{{ url_for('welcome.index') }}" class="btn btn-secondary">{{ t('admin_dashboard.back_welcome') }}</a>
-            <button onclick="showConfigModal(); return false;" class="btn btn-secondary">{{ t('admin_dashboard.config') }}</button>
-            <a href="{{ url_for('admin.oci_config') }}" class="btn btn-secondary">{{ t('admin_dashboard.oci_config') }}</a>
-            <button onclick="restartAppManager(); return false;" class="btn btn-secondary">{{ t('admin_dashboard.restart_app_manager') }}</button>
+            <button type="button" data-action="showConfigModal" class="btn btn-secondary">{{ t('admin_dashboard.config') }}</button>
+            <button type="button" data-action="restartAppManager" class="btn btn-secondary">{{ t('admin_dashboard.restart_app_manager') }}</button>
             <a href="{{ url_for('admin.logout') }}" class="btn btn-secondary">{{ t('admin_dashboard.logout') }}</a>
         </div>
     </header>
     
-    <!-- Configured Applications -->
-    <div class="apps-list">
-        <div class="apps-list-header">
-            <h2>{{ t('admin_dashboard.configured_apps') }}</h2>
-            <button class="btn btn-primary" onclick="showAddModal()">{{ t('admin_dashboard.add_app') }}</button>
+    <!-- Discovered Apps (single source of truth) -->
+    <div class="ports-console discovered-apps-prominent" id="discovered-apps-console">
+        <div class="console-header" id="discovered-header" data-action="toggleConsole" data-console="discovered">
+            <h2><span class="chevron">▶</span>{{ t('admin_dashboard.discovered_apps') }}</h2>
+            <div class="header-actions-group">
+                <button type="button" class="btn btn-primary" data-action="showAddModal">{{ t('admin_dashboard.add_app') }}</button>
+                <button type="button" class="btn btn-secondary" data-action="refreshDiscoveredApps">🔄 Refresh</button>
+            </div>
         </div>
-        
-        <div id="apps-container" class="apps-container">
-            {% for app in apps %}
-            <div class="app-row" data-app-id="{{ app.id }}">
-                <div class="app-row-content">
-                    <div class="app-serve-checkbox">
-                        <label class="checkbox-label">
-                            <input type="checkbox" 
-                                   class="serve-app-checkbox" 
-                                   data-app-id="{{ app.id }}" 
-                                   {% if app.get('serve_app', True) %}checked{% endif %}
-                                   onchange="toggleServeApp('{{ app.id }}', this.checked)">
-                            <span>{{ t('admin_dashboard.serve_app') }}</span>
-                        </label>
-                    </div>
-                    <div class="app-info">
-                        {% if app.logo %}
-                            <img src="{{ url_for('admin.uploaded_file', filename=app.logo) }}" alt="{{ app.name }}" class="logo-preview">
-                        {% else %}
-                            <div class="logo-placeholder-small">{{ app.name[0].upper() }}</div>
-                        {% endif %}
-                        <div class="app-details">
-                            <h3>{{ app.name }}</h3>
-                            <p>{{ t('admin_dashboard.app_details', port=app.port, service=app.get('service_name', t('admin_dashboard.na'))) }}</p>
-                        </div>
-                    </div>
-                    <div class="app-actions">
-                        <div class="dropdown">
-                            <button class="btn-icon" onclick="toggleDropdown('{{ app.id }}')">⋯</button>
-                            <div id="dropdown-{{ app.id }}" class="dropdown-menu">
-                                <a href="#" onclick="editApp('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.edit') }}</a>
-                                <a href="#" onclick="testApp('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.test') }}</a>
-                                <a href="#" onclick="fixAppConfig('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.fix_configuration') }}</a>
-                                <a href="#" onclick="fixSSL('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.fix_ssl') }}</a>
-                                <a href="#" onclick="restartApp('{{ app.id }}'); return false;">{{ t('admin_dashboard.menu.restart') }}</a>
-                                <a href="{{ url_for('admin.view_logs', app_id=app.id) }}" target="_blank">{{ t('admin_dashboard.menu.see_logs') }}</a>
-                                <a href="#" onclick="deleteApp('{{ app.id }}'); return false;" class="danger">{{ t('admin_dashboard.menu.delete') }}</a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-            
-            {% if not apps %}
-            <div class="no-apps">
-                <p>{{ t('admin_dashboard.no_apps') }}</p>
-            </div>
-            {% endif %}
+        <div id="discovered-apps-content" class="console-content">
+            <p class="console-loading">{{ t('admin_dashboard.loading_discovered') }}</p>
         </div>
     </div>
-    
+
     <!-- Admin Tools Section -->
     <div style="margin-top: 40px; margin-bottom: 20px;">
         <h2 style="color: #d4d4d4; font-size: 1.8em; font-weight: 600; border-bottom: 2px solid #667eea; padding-bottom: 10px;">{{ t('admin_dashboard.admin_tools') }}</h2>
     </div>
     
     <!-- Ports Console -->
-    <div class="ports-console">
-        <div class="console-header collapsed" onclick="toggleConsole('ports')">
+    <div class="ports-console" id="ports-console">
+        <div class="console-header collapsed" data-action="toggleConsole" data-console="ports">
             <h2><span class="chevron">▶</span>{{ t('admin_dashboard.active_ports_console') }}</h2>
             <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshPortsConsole()">{{ t('admin_dashboard.refresh') }}</button>
+                <button type="button" class="btn btn-secondary" data-action="refreshPortsConsole">{{ t('admin_dashboard.refresh') }}</button>
             </div>
         </div>
         <div id="ports-console-content" class="console-content collapsed">
@@ -511,10 +601,10 @@
     
     <!-- Terminal Console -->
     <div class="terminal-console">
-        <div class="console-header collapsed" onclick="toggleConsole('terminal')">
+        <div class="console-header collapsed" data-action="toggleConsole" data-console="terminal">
             <h2><span class="chevron">▶</span>{{ t('admin_dashboard.server_terminal') }}</h2>
             <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); clearTerminal()">{{ t('admin_dashboard.clear') }}</button>
+                <button type="button" class="btn btn-secondary" data-action="clearTerminal">{{ t('admin_dashboard.clear') }}</button>
             </div>
         </div>
         <div id="terminal-content" class="terminal-content collapsed">
@@ -528,10 +618,10 @@
     
     <!-- Resource Manager -->
     <div class="resource-manager">
-        <div class="console-header collapsed" onclick="toggleConsole('resources')">
+        <div class="console-header collapsed" data-action="toggleConsole" data-console="resources">
             <h2><span class="chevron">▶</span>Resource Manager</h2>
             <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshResourceStats()">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary" data-action="refreshResourceStats">🔄 Refresh</button>
             </div>
         </div>
         <div id="resources-content" class="console-content collapsed">
@@ -578,14 +668,14 @@
     
     <!-- Traffic Manager -->
     <div class="resource-manager">
-        <div class="console-header collapsed" onclick="toggleConsole('traffic')">
+        <div class="console-header collapsed" data-action="toggleConsole" data-console="traffic">
             <h2><span class="chevron">▶</span>Traffic Analytics</h2>
             <div class="header-actions-group">
-                <label class="traffic-filter-checkbox" onclick="event.stopPropagation();">
-                    <input type="checkbox" id="include-local-checkbox" checked onchange="handleIncludeLocalChange()">
+                <label class="traffic-filter-checkbox" data-action="noop">
+                    <input type="checkbox" id="include-local-checkbox" checked>
                     <span>Include LastTerminal</span>
                 </label>
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshTrafficStats()">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary" data-action="refreshTrafficStats">🔄 Refresh</button>
             </div>
         </div>
         <div id="traffic-content" class="console-content collapsed">
@@ -650,10 +740,10 @@
     
     <!-- Admin Login Tracking -->
     <div class="resource-manager">
-        <div class="console-header collapsed" onclick="toggleConsole('admin-logins')">
+        <div class="console-header collapsed" data-action="toggleConsole" data-console="admin-logins">
             <h2><span class="chevron">▶</span>Admin Login History</h2>
             <div class="header-actions-group">
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); refreshAdminLogins()">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary" data-action="refreshAdminLogins">🔄 Refresh</button>
             </div>
         </div>
         <div id="admin-logins-content" class="console-content collapsed">
@@ -678,59 +768,49 @@
     </div>
 </div>
 
-<!-- Add/Edit Modal -->
+<!-- Add/Edit Modal - simplified: Name, Folder, Port (optional), Service (optional) -->
 <div id="app-modal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content modal-form-simple">
         <div class="modal-header">
             <h2 id="modal-title">Add Application</h2>
-            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <button type="button" class="modal-close" data-action="closeModal" aria-label="Close">&times;</button>
         </div>
         <form id="app-form" class="modal-form" enctype="multipart/form-data">
             <input type="hidden" id="app-id" name="app_id">
             
             <div class="form-group">
                 <label for="app-name">App Name *</label>
-                <input type="text" id="app-name" name="name" required>
+                <input type="text" id="app-name" name="name" required placeholder="e.g. Calculator">
             </div>
             
             <div class="form-group">
-                <label for="app-port">Port *</label>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="number" id="app-port" name="port" required min="1" max="65535" style="flex: 1;">
-                    <button type="button" class="btn btn-secondary" onclick="detectServiceName()" style="white-space: nowrap;" title="Auto-detect service name from port">🔍 Detect</button>
+                <label for="app-folder-path">App Folder *</label>
+                <input type="text" id="app-folder-path" name="folder_path" required placeholder="e.g. /BlackGrid/calculator or /opt/myapp">
+                <small>Full path to the folder containing app.py</small>
+            </div>
+            
+            <div class="form-group form-row-with-btn">
+                <label for="app-port">Port (optional)</label>
+                <div class="form-row-inputs">
+                    <input type="number" id="app-port" name="port" min="1" max="65535" placeholder="Auto-detect from app.py">
+                    <button type="button" class="btn btn-secondary" data-action="detectPort" title="Detect port from app.py in folder">Detect Port</button>
                 </div>
+                <small>Leave blank to use port from app.py (default 5000)</small>
             </div>
             
-            <div class="form-group">
+            <div class="form-group form-row-with-btn">
                 <label for="app-service-name">Service Name (optional)</label>
-                <input type="text" id="app-service-name" name="service_name" placeholder="e.g., calculator.service">
-                <small>
-                    Systemd service name for restart functionality (Linux only). 
-                    Leave blank if not using systemd or running locally.
-                    <br>
-                    <a href="#" onclick="showServiceNameHelp(); return false;" style="color: #667eea;">How to find service name?</a>
-                </small>
+                <div class="form-row-inputs">
+                    <input type="text" id="app-service-name" name="service_name" placeholder="e.g. calculator.service">
+                    <button type="button" class="btn btn-secondary" data-action="detectServiceName" title="Detect systemd service from port">Detect</button>
+                </div>
+                <small>Systemd service for restart (Linux). Leave blank if not using systemd.</small>
             </div>
             
-            <div class="form-group">
-                <label for="app-folder-path">App Folder (optional)</label>
-                <select id="app-folder-path" name="folder_path" style="width: 100%; padding: 8px; border-radius: 4px; background: #252526; color: #d4d4d4; border: 1px solid rgba(255,255,255,0.1);">
-                    <option value="">-- Select folder in /opt --</option>
-                </select>
-                <small>
-                    Select the folder in /opt that contains this app's files. Used for disk usage tracking.
-                    <button type="button" class="btn btn-secondary" onclick="refreshOptFolders()" style="margin-top: 5px; padding: 4px 8px; font-size: 0.85em;">🔄 Refresh Folders</button>
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label for="app-logo">Logo (optional)</label>
-                <input type="file" id="app-logo" name="logo" accept="image/*">
-                <div id="logo-preview-container"></div>
-            </div>
+            <div id="app-modal-error" class="modal-error"></div>
             
             <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn btn-secondary" data-action="closeModal">Cancel</button>
                 <button type="submit" class="btn btn-primary">Save</button>
             </div>
         </form>
@@ -742,7 +822,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2>Configuration</h2>
-            <button type="button" class="close-btn" onclick="closeConfigModal()">&times;</button>
+            <button type="button" class="close-btn" data-action="closeConfigModal" aria-label="Close">&times;</button>
         </div>
         <div class="modal-body" style="padding: 30px;">
             <div class="form-group">
@@ -754,19 +834,30 @@
             </div>
             
             <div class="form-group" style="margin-top: 20px;">
+                <label>App Search Folders</label>
+                <div id="app-search-folders-container" style="margin-top: 10px;">
+                    <!-- App search folders will be loaded here -->
+                </div>
+                <button type="button" class="btn btn-secondary" data-action="addAppSearchFolder" style="margin-top: 10px;">+ Add Folder</button>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Folders to scan for apps (subfolders with app.py). Default: parent of AppManager (e.g. /opt or C:\Projects).
+                </small>
+            </div>
+            
+            <div class="form-group" style="margin-top: 20px;">
                 <label>Environment Variables</label>
                 <div id="env-vars-container" style="margin-top: 10px;">
                     <!-- Environment variables will be loaded here -->
                 </div>
-                <button type="button" class="btn btn-secondary" onclick="addEnvVar()" style="margin-top: 10px;">+ Add Variable</button>
+                <button type="button" class="btn btn-secondary" data-action="addEnvVar" style="margin-top: 10px;">+ Add Variable</button>
                 <small style="display: block; margin-top: 5px; color: #666;">
                     Environment variables for AppManager (requires restart to take effect)
                 </small>
             </div>
         </div>
         <div class="modal-actions" style="padding: 0 30px 30px 30px;">
-            <button type="button" class="btn btn-secondary" onclick="closeConfigModal()" style="flex: 1; min-width: 0;">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="saveConfig()" style="flex: 1; min-width: 0;">Save</button>
+            <button type="button" class="btn btn-secondary" data-action="closeConfigModal" style="flex: 1; min-width: 0;">Cancel</button>
+            <button type="button" class="btn btn-primary" data-action="saveConfig" style="flex: 1; min-width: 0;">Save</button>
         </div>
     </div>
 </div>
@@ -776,7 +867,7 @@
     <div class="modal-content test-results-modal-content">
         <div class="modal-header">
             <h2>Test Results</h2>
-            <button class="modal-close" onclick="closeTestResultsModal()">&times;</button>
+            <button type="button" class="modal-close" data-action="closeTestResultsModal" aria-label="Close">&times;</button>
         </div>
         <div id="test-results-content" class="test-results-content">
             <!-- Test results will be populated here -->
@@ -786,2494 +877,41 @@
     </div>
 </div>
 
-<script>
-let currentEditingId = null;
+<!-- AppManager Log Panel (fixed at bottom, always visible) -->
+<div id="appmanager-log-panel" class="appmanager-log-panel collapsed">
+    <div class="appmanager-log-resize-handle" id="appmanager-log-resize" title="Drag to resize"></div>
+    <div class="appmanager-log-header">
+        <span class="appmanager-log-title">AppManager Logs</span>
+        <label class="appmanager-log-filter">
+            <input type="checkbox" id="appmanager-log-filter-noise" checked> Hide noisy logs
+        </label>
+        <button type="button" class="btn btn-secondary btn-sm appmanager-log-refresh" data-action="refreshAppManagerLogs">🔄</button>
+        <button type="button" class="appmanager-log-toggle" id="appmanager-log-toggle" data-action="toggleAppManagerLogPanel" aria-label="Expand/Collapse"></button>
+    </div>
+    <div class="appmanager-log-content">
+        <pre id="appmanager-log-content-pre"></pre>
+    </div>
+</div>
 
-async function refreshOptFolders() {
-    try {
-        const response = await fetch('/blackgrid/admin/api/opt-folders');
-        const result = await response.json();
-        
-        const select = document.getElementById('app-folder-path');
-        if (!select) return;
-        
-        // Clear existing options except the first one
-        while (select.options.length > 1) {
-            select.remove(1);
-        }
-        
-        if (result.success && result.folders && result.folders.length > 0) {
-            result.folders.forEach(folder => {
-                const option = document.createElement('option');
-                option.value = folder;
-                option.textContent = folder;
-                select.appendChild(option);
-            });
-        } else {
-            const option = document.createElement('option');
-            option.value = '';
-            option.textContent = 'No folders found in /opt';
-            select.appendChild(option);
-        }
-    } catch (error) {
-        console.error('Error loading /opt folders:', error);
-    }
-}
-
-function showAddModal(port = null, serviceName = null) {
-    currentEditingId = null;
-    document.getElementById('modal-title').textContent = 'Add Application';
-    document.getElementById('app-form').reset();
-    document.getElementById('app-id').value = '';
-    document.getElementById('logo-preview-container').innerHTML = '';
-    
-    // Pre-fill port and service name if provided
-    if (port !== null) {
-        document.getElementById('app-port').value = port;
-    }
-    if (serviceName) {
-        document.getElementById('app-service-name').value = serviceName;
-    }
-    
-    // Load /opt folders
-    refreshOptFolders();
-    
-    document.getElementById('app-modal').style.display = 'block';
-}
-
-function addAppFromPort(port, serviceName) {
-    showAddModal(port, serviceName || '');
-}
-
-function editApp(appId) {
-    currentEditingId = appId;
-    document.getElementById('modal-title').textContent = 'Edit Application';
-    
-    // Load /opt folders first
-    refreshOptFolders().then(() => {
-        // Fetch app data
-        fetch(`/blackgrid/admin/api/apps`)
-            .then(r => r.json())
-            .then(data => {
-                const app = data.apps.find(a => a.id === appId);
-                if (app) {
-                    document.getElementById('app-id').value = app.id;
-                    document.getElementById('app-name').value = app.name;
-                    document.getElementById('app-port').value = app.port;
-                    document.getElementById('app-service-name').value = app.service_name || '';
-                    document.getElementById('app-folder-path').value = app.folder_path || '';
-                    
-                    if (app.logo) {
-                        document.getElementById('logo-preview-container').innerHTML = 
-                            `<img src="/blackgrid/admin/uploads/${app.logo}" class="logo-preview" style="margin-top: 10px;">`;
-                    }
-                    
-                    document.getElementById('app-modal').style.display = 'block';
-                }
-            });
-    });
-}
-
-function closeModal() {
-    document.getElementById('app-modal').style.display = 'none';
-    currentEditingId = null;
-}
-
-// Config Modal Functions
-async function showConfigModal() {
-    const modal = document.getElementById('config-modal');
-    modal.style.display = 'block';
-    
-    // Load current timeout
-    try {
-        const response = await fetch('/blackgrid/admin/api/config/shutdown-timeout');
-        const result = await response.json();
-        if (result.success) {
-            document.getElementById('shutdown-timeout').value = result.timeout_minutes;
-        }
-    } catch (error) {
-        console.error('Error loading shutdown timeout:', error);
-    }
-    
-    // Load environment variables
-    try {
-        const response = await fetch('/blackgrid/admin/api/config/env-vars');
-        const result = await response.json();
-        if (result.success) {
-            renderEnvVars(result.env_vars || {});
-        }
-    } catch (error) {
-        console.error('Error loading env vars:', error);
-        renderEnvVars({});
-    }
-}
-
-function closeConfigModal() {
-    document.getElementById('config-modal').style.display = 'none';
-}
-
-function renderEnvVars(envVars) {
-    const container = document.getElementById('env-vars-container');
-    container.innerHTML = '';
-    
-    const entries = Object.entries(envVars);
-    if (entries.length === 0) {
-        container.innerHTML = '<p style="color: #666; font-style: italic;">No environment variables configured</p>';
-        return;
-    }
-    
-    entries.forEach(([key, value], index) => {
-        const div = document.createElement('div');
-        div.style.marginBottom = '10px';
-        div.style.display = 'flex';
-        div.style.gap = '10px';
-        div.style.alignItems = 'center';
-        div.innerHTML = `
-            <input type="text" class="env-var-key" placeholder="Variable name" value="${escapeHtml(key)}" style="flex: 1; padding: 8px;">
-            <input type="text" class="env-var-value" placeholder="Variable value" value="${escapeHtml(value)}" style="flex: 1; padding: 8px;">
-            <button type="button" class="btn btn-secondary" onclick="removeEnvVar(this)" style="padding: 8px 12px;">Remove</button>
-        `;
-        container.appendChild(div);
-    });
-}
-
-function addEnvVar() {
-    const container = document.getElementById('env-vars-container');
-    const div = document.createElement('div');
-    div.style.marginBottom = '10px';
-    div.style.display = 'flex';
-    div.style.gap = '10px';
-    div.style.alignItems = 'center';
-    div.innerHTML = `
-        <input type="text" class="env-var-key" placeholder="Variable name" style="flex: 1; padding: 8px;">
-        <input type="text" class="env-var-value" placeholder="Variable value" style="flex: 1; padding: 8px;">
-        <button type="button" class="btn btn-secondary" onclick="removeEnvVar(this)" style="padding: 8px 12px;">Remove</button>
-    `;
-    container.appendChild(div);
-}
-
-function removeEnvVar(button) {
-    button.parentElement.remove();
-    // If no env vars left, show message
-    const container = document.getElementById('env-vars-container');
-    if (container.children.length === 0) {
-        container.innerHTML = '<p style="color: #666; font-style: italic;">No environment variables configured</p>';
-    }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-async function saveConfig() {
-    try {
-        // Save shutdown timeout
-        const timeout = parseInt(document.getElementById('shutdown-timeout').value);
-        if (isNaN(timeout) || timeout < 1 || timeout > 1440) {
-            alert('Shutdown timeout must be between 1 and 1440 minutes');
-            return;
-        }
-        
-        const timeoutResponse = await fetch('/blackgrid/admin/api/config/shutdown-timeout', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ timeout_minutes: timeout })
-        });
-        
-        const timeoutResult = await timeoutResponse.json();
-        if (!timeoutResult.success) {
-            alert('Error saving shutdown timeout: ' + (timeoutResult.error || 'Unknown error'));
-            return;
-        }
-        
-        // Save environment variables
-        const container = document.getElementById('env-vars-container');
-        const envVars = {};
-        const rows = container.querySelectorAll('div[style*="display: flex"]');
-        
-        rows.forEach(row => {
-            const keyInput = row.querySelector('.env-var-key');
-            const valueInput = row.querySelector('.env-var-value');
-            if (keyInput && keyInput.value.trim()) {
-                envVars[keyInput.value.trim()] = valueInput ? valueInput.value : '';
-            }
-        });
-        
-        const envResponse = await fetch('/blackgrid/admin/api/config/env-vars', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ env_vars: envVars })
-        });
-        
-        const envResult = await envResponse.json();
-        if (!envResult.success) {
-            alert('Error saving environment variables: ' + (envResult.error || 'Unknown error'));
-            return;
-        }
-        
-        alert('✓ Configuration saved successfully!');
-        closeConfigModal();
-    } catch (error) {
-        alert('Error saving configuration: ' + error.message);
-    }
-}
-
-// Close modal when clicking outside
-window.onclick = function(event) {
-    const configModal = document.getElementById('config-modal');
-    if (event.target === configModal) {
-        closeConfigModal();
-    }
-}
-
-function toggleDropdown(appId) {
-    const dropdown = document.getElementById(`dropdown-${appId}`);
-    const appRow = dropdown.closest('.app-row');
-    // Close all other dropdowns
-    document.querySelectorAll('.dropdown-menu').forEach(menu => {
-        if (menu.id !== `dropdown-${appId}`) {
-            menu.style.display = 'none';
-            menu.closest('.app-row')?.classList.remove('dropdown-open');
-        }
-    });
-    if (dropdown.style.display === 'block') {
-        dropdown.style.display = 'none';
-        appRow?.classList.remove('dropdown-open');
-    } else {
-        dropdown.style.display = 'block';
-        appRow?.classList.add('dropdown-open');
-    }
-}
-
-// Close dropdowns when clicking outside
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.dropdown')) {
-        document.querySelectorAll('.dropdown-menu').forEach(menu => {
-            menu.style.display = 'none';
-            menu.closest('.app-row')?.classList.remove('dropdown-open');
-        });
-    }
-});
-
-// Alert banner management
-function showAlert(message, type = 'warning') {
-    // Remove existing alerts
-    const existingAlerts = document.querySelectorAll('.alert-banner');
-    existingAlerts.forEach(alert => alert.remove());
-    
-    // Determine icon based on type
-    let icon = '⚠️';
-    if (type === 'success') {
-        icon = '✓';
-    } else if (type === 'error') {
-        icon = '⚠️';
-    }
-    
-    // Create new alert
-    const alert = document.createElement('div');
-    alert.className = `alert-banner ${type}`;
-    alert.innerHTML = `
-        <span class="alert-icon">${icon}</span>
-        <span class="alert-message">${message}</span>
-        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
-    `;
-    
-    // Insert at top of apps-list
-    const appsList = document.querySelector('.apps-list');
-    appsList.insertBefore(alert, appsList.firstChild);
-    
-    // Auto-remove after 10 seconds
-    setTimeout(() => {
-        if (alert.parentElement) {
-            alert.remove();
-        }
-    }, 10000);
-}
-
-// Ports Console
-async function refreshPortsConsole() {
-    const content = document.getElementById('ports-console-content');
-    content.innerHTML = '<p style="color: #808080; text-align: center; padding: 20px;">Loading...</p>';
-    
-    try {
-        const response = await fetch('/blackgrid/admin/api/active-ports');
-        const result = await response.json();
-        
-        if (result.success && result.ports && result.ports.length > 0) {
-            let html = '<table><thead><tr><th>Port</th><th>Service Name</th><th>PID</th><th>Action</th></tr></thead><tbody>';
-            result.ports.forEach(item => {
-                const serviceName = item.service_name || '';
-                html += `<tr>
-                    <td class="port-number">${item.port}</td>
-                    <td class="${item.service_name ? 'service-name' : 'no-service'}">${item.service_name || '(no service)'}</td>
-                    <td class="pid-info">${item.pid || 'N/A'}</td>
-                    <td><button class="btn-add-port" data-port="${item.port}" data-service-name="${serviceName.replace(/"/g, '&quot;')}" title="Add as configured application">+</button></td>
-                </tr>`;
-            });
-            html += '</tbody></table>';
-            content.innerHTML = html;
-            
-            // Attach event listeners to all add buttons
-            content.querySelectorAll('.btn-add-port').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const port = parseInt(this.getAttribute('data-port'));
-                    const serviceName = this.getAttribute('data-service-name') || '';
-                    addAppFromPort(port, serviceName);
-                });
-            });
-        } else {
-            content.innerHTML = '<p style="color: #808080; text-align: center; padding: 20px;">No active ports found or detection not available.</p>';
-        }
-    } catch (error) {
-        content.innerHTML = `<p style="color: #dc3545; text-align: center; padding: 20px;">Error loading ports: ${error.message}</p>`;
-    }
-}
-
-// Toggle console collapse/expand
-function toggleConsole(type) {
-    let header, content;
-    
-    if (type === 'ports') {
-        header = document.querySelector('.ports-console .console-header');
-        content = document.getElementById('ports-console-content');
-    } else if (type === 'terminal') {
-        header = document.querySelector('.terminal-console .console-header');
-        content = document.getElementById('terminal-content');
-    } else if (type === 'resources') {
-        header = document.querySelector('.resource-manager .console-header');
-        content = document.getElementById('resources-content');
-        // Initialize resource manager on first expand (with small delay to avoid blocking)
-        const wasCollapsed = header && header.classList.contains('collapsed');
-        if (wasCollapsed) {
-            // Small delay to avoid blocking UI, and only load if not already loaded
-            setTimeout(() => {
-                // Only load if section is now expanded and charts don't exist yet
-                if (header && !header.classList.contains('collapsed') && !memoryChart) {
-                    refreshResourceStats();
-                }
-            }, 100);
-        }
-    } else if (type === 'traffic') {
-        // Find the traffic section header (the one that contains "Traffic Analytics")
-        const allManagers = document.querySelectorAll('.resource-manager');
-        header = null;
-        for (let mgr of allManagers) {
-            const h = mgr.querySelector('.console-header');
-            if (h && h.textContent.includes('Traffic Analytics')) {
-                header = h;
-                break;
-            }
-        }
-        content = document.getElementById('traffic-content');
-        // Initialize traffic manager on first expand
-        if (header && header.classList.contains('collapsed')) {
-            setTimeout(() => {
-                if (!header.classList.contains('collapsed') && !dailyVisitsChart) {
-                    refreshTrafficStats();
-                }
-            }, 100);
-        }
-    } else if (type === 'admin-logins') {
-        // Find the admin logins section header (the one that contains "Admin Login History")
-        const allManagers = document.querySelectorAll('.resource-manager');
-        header = null;
-        for (let mgr of allManagers) {
-            const h = mgr.querySelector('.console-header');
-            if (h && h.textContent.includes('Admin Login History')) {
-                header = h;
-                break;
-            }
-        }
-        content = document.getElementById('admin-logins-content');
-        // Initialize admin logins on first expand
-        if (header && header.classList.contains('collapsed')) {
-            setTimeout(() => {
-                if (!header.classList.contains('collapsed')) {
-                    refreshAdminLogins();
-                }
-            }, 100);
-        }
-    }
-    
-    if (header && content) {
-        const isCollapsed = header.classList.contains('collapsed');
-        
-        if (isCollapsed) {
-            header.classList.remove('collapsed');
-            content.classList.remove('collapsed');
-        } else {
-            header.classList.add('collapsed');
-            content.classList.add('collapsed');
-        }
-    }
-}
-
-// Load ports console on page load
-document.addEventListener('DOMContentLoaded', () => {
-    refreshPortsConsole();
-    initializeTerminal();
-    // Resource manager will be initialized when expanded
-});
-
-// Terminal functionality
-let terminalHistory = [];
-let terminalHistoryIndex = -1;
-let currentCommand = '';
-let currentWorkingDirectory = '~';
-let autocompleteMatches = [];
-let autocompleteIndex = -1;
-let lastAutocompleteQuery = '';
-
-function updateTerminalPrompt() {
-    const promptDisplay = document.getElementById('terminal-prompt-display');
-    if (promptDisplay) {
-        const displayDir = currentWorkingDirectory === '~' ? '~' : currentWorkingDirectory;
-        promptDisplay.textContent = displayDir + '$';
-    }
-}
-
-function initializeTerminal() {
-    const terminalInput = document.getElementById('terminal-input');
-    const terminalOutput = document.getElementById('terminal-output');
-    
-    if (!terminalInput || !terminalOutput) return;
-    
-    // Update prompt display
-    updateTerminalPrompt();
-    
-    // Welcome message
-    addTerminalLine('output', 'Welcome to AppManager Server Terminal');
-    addTerminalLine('output', 'Type commands to execute on the server. Use "help" for available commands.');
-    addTerminalLine('output', 'Press TAB for file/folder autocomplete.');
-    addTerminalLine('output', '');
-    
-    // Focus input
-    terminalInput.focus();
-    
-    // Handle Enter key
-    terminalInput.addEventListener('keydown', async (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const command = terminalInput.value.trim();
-            if (command) {
-                executeCommand(command);
-                terminalInput.value = '';
-                terminalHistoryIndex = -1;
-                autocompleteMatches = [];
-                autocompleteIndex = -1;
-            }
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (terminalHistory.length > 0) {
-                if (terminalHistoryIndex === -1) {
-                    currentCommand = terminalInput.value;
-                    terminalHistoryIndex = terminalHistory.length;
-                }
-                terminalHistoryIndex = Math.max(0, terminalHistoryIndex - 1);
-                terminalInput.value = terminalHistory[terminalHistoryIndex];
-                autocompleteMatches = [];
-                autocompleteIndex = -1;
-            }
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (terminalHistoryIndex >= 0) {
-                terminalHistoryIndex = Math.min(terminalHistory.length - 1, terminalHistoryIndex + 1);
-                if (terminalHistoryIndex === terminalHistory.length - 1) {
-                    terminalInput.value = currentCommand;
-                    terminalHistoryIndex = -1;
-                } else {
-                    terminalInput.value = terminalHistory[terminalHistoryIndex];
-                }
-                autocompleteMatches = [];
-                autocompleteIndex = -1;
-            }
-        } else if (e.key === 'Tab') {
-            e.preventDefault();
-            await handleTabCompletion(terminalInput);
-        }
-    });
-    
-    // Keep focus on input when clicking terminal
-    terminalOutput.addEventListener('click', () => {
-        terminalInput.focus();
-    });
-}
-
-async function handleTabCompletion(input) {
-    const value = input.value;
-    const cursorPos = input.selectionStart;
-    
-    // Extract the word at cursor position (could be a path)
-    const textBeforeCursor = value.substring(0, cursorPos);
-    const textAfterCursor = value.substring(cursorPos);
-    
-    // Find the start of the current word/path
-    // Look for spaces or start of line
-    let wordStart = textBeforeCursor.length;
-    for (let i = textBeforeCursor.length - 1; i >= 0; i--) {
-        if (textBeforeCursor[i] === ' ' || textBeforeCursor[i] === '\t') {
-            wordStart = i + 1;
-            break;
-        }
-        if (i === 0) {
-            wordStart = 0;
-        }
-    }
-    
-    const partialPath = textBeforeCursor.substring(wordStart);
-    
-    // If no partial path, don't autocomplete
-    if (!partialPath) {
-        return;
-    }
-    
-    // Get autocomplete suggestions
-    try {
-        const response = await fetch('/blackgrid/admin/api/terminal/autocomplete', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                path: partialPath,
-                cwd: currentWorkingDirectory
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.matches && result.matches.length > 0) {
-            // Check if this is the same query (for cycling through matches)
-            if (partialPath === lastAutocompleteQuery && autocompleteMatches.length > 0) {
-                // Cycle to next match
-                autocompleteIndex = (autocompleteIndex + 1) % autocompleteMatches.length;
-            } else {
-                // New query, reset
-                autocompleteMatches = result.matches;
-                autocompleteIndex = 0;
-                lastAutocompleteQuery = partialPath;
-            }
-            
-            const match = autocompleteMatches[autocompleteIndex];
-            const dirPart = partialPath.includes('/') ? partialPath.substring(0, partialPath.lastIndexOf('/') + 1) : '';
-            const completedPath = dirPart + match.name;
-            
-            // If it's a directory, add trailing slash
-            const finalPath = match.is_directory ? completedPath + '/' : completedPath;
-            
-            // Replace the partial path with completed path
-            const newValue = textBeforeCursor.substring(0, wordStart) + finalPath + textAfterCursor;
-            input.value = newValue;
-            
-            // Set cursor position after completed path
-            const newCursorPos = wordStart + finalPath.length;
-            input.setSelectionRange(newCursorPos, newCursorPos);
-            
-            // If multiple matches, show hint
-            if (autocompleteMatches.length > 1) {
-                // Show matches in terminal (temporary, will be cleared on next command)
-                const matchList = autocompleteMatches.map((m, i) => {
-                    const marker = i === autocompleteIndex ? '>' : ' ';
-                    const type = m.is_directory ? '/' : '';
-                    return `${marker} ${m.name}${type}`;
-                }).join('  ');
-                
-                // Add hint line (will be cleared when user types)
-                const hintLine = document.createElement('div');
-                hintLine.className = 'terminal-line output';
-                hintLine.style.color = '#808080';
-                hintLine.style.fontSize = '0.85em';
-                hintLine.textContent = `Matches (${autocompleteIndex + 1}/${autocompleteMatches.length}): ${matchList}`;
-                hintLine.id = 'autocomplete-hint';
-                
-                // Remove previous hint if exists
-                const prevHint = document.getElementById('autocomplete-hint');
-                if (prevHint) {
-                    prevHint.remove();
-                }
-                
-                const terminalOutput = document.getElementById('terminal-output');
-                terminalOutput.appendChild(hintLine);
-                terminalOutput.scrollTop = terminalOutput.scrollHeight;
-            }
-        }
-    } catch (error) {
-        // Silently fail on autocomplete errors
-        console.error('Autocomplete error:', error);
-    }
-}
-
-function addTerminalLine(type, text) {
-    const terminalOutput = document.getElementById('terminal-output');
-    if (!terminalOutput) return;
-    
-    const line = document.createElement('div');
-    line.className = `terminal-line ${type}`;
-    line.textContent = text;
-    terminalOutput.appendChild(line);
-    
-    // Auto-scroll to bottom
-    terminalOutput.scrollTop = terminalOutput.scrollHeight;
-}
-
-function clearTerminal() {
-    const terminalOutput = document.getElementById('terminal-output');
-    if (terminalOutput) {
-        terminalOutput.innerHTML = '';
-        addTerminalLine('output', 'Terminal cleared.');
-        addTerminalLine('output', '');
-    }
-}
-
-async function executeCommand(command) {
-    const terminalOutput = document.getElementById('terminal-output');
-    const terminalInput = document.getElementById('terminal-input');
-    
-    if (!terminalOutput || !terminalInput) return;
-    
-    // Remove autocomplete hint if exists
-    const hint = document.getElementById('autocomplete-hint');
-    if (hint) {
-        hint.remove();
-    }
-    
-    // Reset autocomplete state
-    autocompleteMatches = [];
-    autocompleteIndex = -1;
-    lastAutocompleteQuery = '';
-    
-    // Add command to history
-    if (command && (terminalHistory.length === 0 || terminalHistory[terminalHistory.length - 1] !== command)) {
-        terminalHistory.push(command);
-        if (terminalHistory.length > 100) {
-            terminalHistory.shift(); // Keep last 100 commands
-        }
-    }
-    
-    // Display command with current directory
-    const promptDir = currentWorkingDirectory === '~' ? '~' : currentWorkingDirectory;
-    addTerminalLine('command', `${promptDir}$ ${command}`);
-    
-    // Handle special commands
-    if (command === 'clear' || command === 'cls') {
-        clearTerminal();
-        return;
-    }
-    
-    // Note: cd command handling is now done server-side and returned in response
-    
-    if (command === 'help') {
-        addTerminalLine('output', 'Available commands:');
-        addTerminalLine('output', '  ls, cd, pwd, cat, head, tail, grep, find');
-        addTerminalLine('output', '  ps, df, du, free, uptime, whoami, uname');
-        addTerminalLine('output', '  systemctl, journalctl, netstat, ss');
-        addTerminalLine('output', '  git, python3, pip, npm, docker');
-        addTerminalLine('output', '  nginx, certbot, ufw, iptables');
-        addTerminalLine('output', '');
-        addTerminalLine('output', 'Shell Scripts:');
-        addTerminalLine('output', '  bash script.sh - Run a shell script');
-        addTerminalLine('output', '  sh script.sh - Run a shell script');
-        addTerminalLine('output', '  ./script.sh - Run an executable script');
-        addTerminalLine('output', '  Scripts must be in: ~, /opt/appmanager, or /tmp');
-        addTerminalLine('output', '');
-        addTerminalLine('output', 'Terminal Commands:');
-        addTerminalLine('output', '  clear - Clear terminal');
-        addTerminalLine('output', '  help - Show this help message');
-        addTerminalLine('output', '');
-        return;
-    }
-    
-    // Show loading indicator
-    const loadingLine = document.createElement('div');
-    loadingLine.className = 'terminal-line loading';
-    loadingLine.textContent = 'Executing...';
-    terminalOutput.appendChild(loadingLine);
-    terminalOutput.scrollTop = terminalOutput.scrollHeight;
-    
-    // Disable input during execution
-    terminalInput.disabled = true;
-    
-    try {
-        const response = await fetch('/blackgrid/admin/api/terminal/execute', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                command: command,
-                cwd: currentWorkingDirectory
-            })
-        });
-        
-        // Remove loading indicator
-        loadingLine.remove();
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // Update working directory if returned
-            if (result.cwd) {
-                currentWorkingDirectory = result.cwd;
-                updateTerminalPrompt();
-            }
-            
-            // Display output
-            if (result.output) {
-                const lines = result.output.split('\n');
-                lines.forEach(line => {
-                    addTerminalLine('output', line);
-                });
-            } else {
-                // For cd command, don't show "(no output)" - it's normal
-                if (!command.startsWith('cd ')) {
-                    addTerminalLine('output', '(no output)');
-                }
-            }
-            
-            // Show exit code if non-zero
-            if (result.exit_code !== 0) {
-                addTerminalLine('error', `[Exit code: ${result.exit_code}]`);
-            }
-        } else {
-            // Even on error, update cwd if provided (to maintain state)
-            if (result.cwd) {
-                currentWorkingDirectory = result.cwd;
-                updateTerminalPrompt();
-            }
-            addTerminalLine('error', `Error: ${result.error || 'Unknown error'}`);
-            if (result.hint) {
-                addTerminalLine('output', result.hint);
-            }
-        }
-    } catch (error) {
-        loadingLine.remove();
-        addTerminalLine('error', `Network error: ${error.message}`);
-    } finally {
-        terminalInput.disabled = false;
-        terminalInput.focus();
-        addTerminalLine('output', ''); // Empty line after command
-    }
-}
-
-document.getElementById('app-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    const appId = document.getElementById('app-id').value;
-    
-    try {
-        let response;
-        if (appId) {
-            // Update
-            const data = {
-                name: formData.get('name'),
-                port: parseInt(formData.get('port')),
-                service_name: formData.get('service_name') || null,
-                folder_path: formData.get('folder_path') || null,
-                logo: formData.get('logo') ? null : document.querySelector('#logo-preview-container img')?.src.split('/static/')[1] || null
-            };
-            
-            if (formData.get('logo') && formData.get('logo').size > 0) {
-                // Has new logo file
-                const updateFormData = new FormData();
-                updateFormData.append('name', data.name);
-                updateFormData.append('port', data.port);
-                updateFormData.append('service_name', data.service_name || '');
-                updateFormData.append('folder_path', data.folder_path || '');
-                updateFormData.append('logo', formData.get('logo'));
-                
-                response = await fetch(`/blackgrid/admin/api/apps/${appId}`, {
-                    method: 'PUT',
-                    body: updateFormData
-                });
-            } else {
-                response = await fetch(`/blackgrid/admin/api/apps/${appId}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-            }
-        } else {
-            // Create
-            response = await fetch('/blackgrid/admin/api/apps', {
-                method: 'POST',
-                body: formData
-            });
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // Refresh ports console
-            refreshPortsConsole();
-            location.reload();
-        } else {
-            // Show error banner instead of alert
-            const errorMsg = result.error || 'Unknown error';
-            showAlert(errorMsg, 'error');
-            
-            // If it's a port listening error, highlight the port field
-            if (result.is_listening === false) {
-                document.getElementById('app-port').style.borderColor = '#dc3545';
-                document.getElementById('app-port').focus();
-            }
-        }
-    } catch (error) {
-        showAlert('Error: ' + error.message, 'error');
-    }
-});
-
-function closeTestResultsModal() {
-    document.getElementById('test-results-modal').style.display = 'none';
-}
-
-async function testApp(appId) {
-    try {
-        // Show loading state
-        const modal = document.getElementById('test-results-modal');
-        const content = document.getElementById('test-results-content');
-        content.innerHTML = '<p style="text-align: center; padding: 40px; color: #b0b0b0;">Testing app connectivity...</p>';
-        modal.style.display = 'block';
-        
-        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/test`, {
-            method: 'POST'
-        });
-        const result = await response.json();
-        
-        // Build HTML content for test results
-        let html = '<div class="test-results">';
-        
-        // Socket listening test
-        html += '<div class="test-section">';
-        html += '<h3>Socket Test</h3>';
-        html += '<div class="test-result ' + (result.is_listening ? 'success' : 'error') + '">';
-        html += result.is_listening 
-            ? '<span class="test-icon">✓</span><span>Port ' + result.port + ' is listening</span>'
-            : '<span class="test-icon">✗</span><span>Port ' + result.port + ' is NOT listening</span>';
-        html += '</div>';
-        html += '</div>';
-        
-        // HTTP test (local / server address)
-        html += '<div class="test-section">';
-        html += '<h3>HTTP Test (Port ' + result.port + ')</h3>';
-        const httpIsSuccessful = result.http.accessible && result.http.successful;
-        html += '<div class="test-result ' + (httpIsSuccessful ? 'success' : 'error') + '">';
-        if (result.http.accessible) {
-            const status = typeof result.http.status === 'number' ? 'HTTP ' + result.http.status : result.http.status;
-            if (result.http.successful) {
-                html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
-            } else {
-                html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
-                if (typeof result.http.status === 'number' && result.http.status === 404) {
-                    html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
-                } else if (typeof result.http.status === 'number' && result.http.status >= 500) {
-                    html += '<div class="test-warning">⚠ Server error (' + result.http.status + ') - App is returning an error</div>';
-                }
-            }
-        } else {
-            html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.http.status + '</span>';
-        }
-        html += '</div>';
-        html += '<div class="test-url"><strong>URL:</strong> <code>' + result.http.url + '</code></div>';
-        html += '</div>';
-
-        // Public HTTP test (domain:port users click)
-        if (result.public_http) {
-            html += '<div class="test-section">';
-            html += '<h3>Public HTTP Test (' + (result.public_http.host || 'domain') + ':' + result.port + ')</h3>';
-            const publicHttpSuccessful = result.public_http.accessible && result.public_http.successful;
-            html += '<div class="test-result ' + (publicHttpSuccessful ? 'success' : 'error') + '">';
-            if (result.public_http.accessible) {
-                const status = typeof result.public_http.status === 'number' ? 'HTTP ' + result.public_http.status : result.public_http.status;
-                if (result.public_http.successful) {
-                    html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
-                } else {
-                    html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
-                    if (typeof result.public_http.status === 'number' && result.public_http.status === 404) {
-                        html += '<div class="test-warning">⚠ Resource not found (404) - App may be running but route returned 404</div>';
-                    } else if (typeof result.public_http.status === 'number' && result.public_http.status >= 500) {
-                        html += '<div class="test-warning">⚠ Server error (' + result.public_http.status + ') - App is returning an error</div>';
-                    }
-                }
-            } else {
-                html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.public_http.status + '</span>';
-            }
-            html += '</div>';
-            html += '<div class="test-url"><strong>URL:</strong> <code>' + result.public_http.url + '</code></div>';
-            html += '</div>';
-        }
-        
-        // HTTPS test
-        html += '<div class="test-section">';
-        html += '<h3>HTTPS Test (Port ' + result.https.port + ')</h3>';
-        const httpsIsSuccessful = result.https.accessible && result.https.successful;
-        html += '<div class="test-result ' + (httpsIsSuccessful ? 'success' : 'error') + '">';
-        if (result.https.accessible) {
-            const status = typeof result.https.status === 'number' ? 'HTTP ' + result.https.status : result.https.status;
-            if (result.https.successful) {
-                html += '<span class="test-icon">✓</span><span>Accessible - ' + status + '</span>';
-            } else {
-                html += '<span class="test-icon">✗</span><span>Error - ' + status + '</span>';
-                if (result.https.status === 'SSL_ERROR') {
-                    html += '<div class="test-warning">⚠ SSL certificate issue detected (certificate not trusted)</div>';
-                } else if (typeof result.https.status === 'number' && result.https.status === 404) {
-                    html += '<div class="test-warning">⚠ Resource not found (404) - App may not be responding correctly</div>';
-                } else if (typeof result.https.status === 'number' && result.https.status >= 500) {
-                    html += '<div class="test-warning">⚠ Server error (' + result.https.status + ') - App is returning an error</div>';
-                }
-            }
-        } else {
-            html += '<span class="test-icon">✗</span><span>NOT accessible - ' + result.https.status + '</span>';
-        }
-        html += '</div>';
-        html += '<div class="test-url"><strong>URL:</strong> <code>' + result.https.url + '</code></div>';
-        
-        // SSL Certificate Status
-        if (result.https.certificate_status) {
-            const certStatus = result.https.certificate_status;
-            html += '<div class="test-cert-info" style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;">';
-            html += '<strong>SSL Certificate Status:</strong><br>';
-            html += '• Nginx Configured: ' + (certStatus.nginx_configured ? '✓ Yes' : '✗ No') + '<br>';
-            html += '• Certificate Exists: ' + (certStatus.certificate_exists ? '✓ Yes' : '✗ No') + '<br>';
-            html += '• Certificate Trusted: ' + (certStatus.certificate_trusted ? '✓ Yes (Let\'s Encrypt)' : '✗ No') + '<br>';
-            if (certStatus.certificate_path) {
-                html += '• Certificate Path: <code style="font-size: 0.9em;">' + certStatus.certificate_path + '</code><br>';
-            }
-            if (certStatus.certificate_info) {
-                const certInfo = certStatus.certificate_info;
-                if (certInfo.issuer) {
-                    html += '• Issuer: ' + (certInfo.issuer.get('organizationName') || certInfo.issuer.get('CN') || 'Unknown') + '<br>';
-                }
-                if (certInfo.expires) {
-                    html += '• Expires: ' + certInfo.expires + '<br>';
-                }
-                if (certInfo.error) {
-                    html += '• Error: <span style="color: #f48771;">' + certInfo.error + '</span><br>';
-                }
-            }
-            if (certStatus.error) {
-                html += '• Error: <span style="color: #f48771;">' + certStatus.error + '</span><br>';
-            }
-            html += '</div>';
-        }
-        html += '</div>';
-        
-        // Masked-path proxy tests removed (new routing model is domain:port)
-        
-        html += '</div>';
-        
-        content.innerHTML = html;
-    } catch (error) {
-        const content = document.getElementById('test-results-content');
-        content.innerHTML = '<div class="test-error"><p>Error testing app: ' + error.message + '</p></div>';
-    }
-}
-
-{% include 'admin/js/fixPortConfiguration.js' %}
-
-// NOTE: Do not close this modal on outside click.
-// It should only close via the "X" button (see `closeTestResultsModal()`).
-
-async function fixSSL(appId) {
-    if (!confirm('This will recreate the SSL certificate and nginx configuration for this app.\n\nThis ensures HTTPS works properly with proper signatures.\n\nContinue?')) {
-        return;
-    }
-    
-    // Close dropdown
-    const dropdown = document.getElementById(`dropdown-${appId}`);
-    if (dropdown) {
-        dropdown.style.display = 'none';
-        dropdown.closest('.app-row')?.classList.remove('dropdown-open');
-    }
-    
-    try {
-        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/fix-ssl`, {
-            method: 'POST'
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-            let message = '✓ SSL fixed successfully!\n\n';
-            message += result.message || 'SSL certificate and nginx configuration updated.';
-            
-            if (result.certificate_info) {
-                message += `\n\nCertificate Type: ${result.certificate_info.type}`;
-                if (result.certificate_info.trusted) {
-                    message += '\n✓ Using trusted certificate (browsers will trust it)';
-                } else {
-                    message += '\n⚠ Certificate is not trusted';
-                    message += '\n\nPlease set up Let\'s Encrypt for trusted certificates.';
-                }
-            }
-            
-            alert(message);
-        } else {
-            alert('✗ Error: ' + (result.error || 'Unknown error'));
-        }
-    } catch (error) {
-        alert('Error fixing SSL: ' + error.message);
-    }
-}
-
-async function restartApp(appId) {
-    if (!confirm('Are you sure you want to restart this app?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/restart`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        // Check if response is JSON before parsing
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            const text = await response.text();
-            throw new Error(`Expected JSON but received ${contentType}. Response: ${text.substring(0, 100)}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            alert('✓ ' + (result.message || 'App restarted successfully'));
-        } else {
-            alert('✗ Error: ' + (result.error || 'Unknown error'));
-        }
-    } catch (error) {
-        alert('Error restarting app: ' + error.message);
-    }
-}
-
-async function restartAppManager() {
-    if (!confirm('Are you sure you want to restart App Manager? This will temporarily disconnect you from the dashboard.')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/blackgrid/admin/api/restart-appmanager`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        // Check if response is JSON before parsing
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            const text = await response.text();
-            throw new Error(`Expected JSON but received ${contentType}. Response: ${text.substring(0, 100)}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            alert('✓ ' + (result.message || 'App Manager restarted successfully. You will be disconnected momentarily.'));
-            // Redirect to welcome page after a short delay
-            setTimeout(() => {
-                window.location.href = '/blackgrid/';
-            }, 2000);
-        } else {
-            alert('✗ Error: ' + (result.error || 'Unknown error'));
-        }
-    } catch (error) {
-        // If we get a network error, the service might have restarted before response was sent
-        // In this case, assume it worked and redirect anyway
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            alert('✓ Restart initiated. The service is restarting. You will be redirected...');
-            setTimeout(() => {
-                window.location.href = '/blackgrid/';
-            }, 2000);
-        } else {
-            alert('Error restarting App Manager: ' + error.message);
-        }
-    }
-}
-
-async function toggleServeApp(appId, checked) {
-    const checkbox = document.querySelector(`input.serve-app-checkbox[data-app-id="${appId}"]`);
-    
-    try {
-        const response = await fetch(`/blackgrid/admin/api/apps/${appId}/toggle-serve`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-            // Ensure checkbox state matches API response
-            if (checkbox) {
-                checkbox.checked = result.app.serve_app;
-            }
-            // Show a brief feedback message
-            const status = result.app.serve_app ? 'enabled' : 'disabled';
-            showAlert(`App serving ${status}`, 'success');
-        } else {
-            // Revert checkbox on error
-            if (checkbox) {
-                checkbox.checked = !checked;
-            }
-            alert('Error: ' + (result.error || 'Unknown error'));
-        }
-    } catch (error) {
-        // Revert checkbox on error
-        if (checkbox) {
-            checkbox.checked = !checked;
-        }
-        alert('Error toggling serve app: ' + error.message);
-    }
-}
-
-async function deleteApp(appId) {
-    if (!confirm('Are you sure you want to delete this app? This cannot be undone.')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/blackgrid/admin/api/apps/${appId}`, {
-            method: 'DELETE'
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-            location.reload();
-        } else {
-            alert('Error: ' + (result.error || 'Unknown error'));
-        }
-    } catch (error) {
-        alert('Error deleting app: ' + error.message);
-    }
-}
-
-// Logo preview
-document.getElementById('app-logo').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            document.getElementById('logo-preview-container').innerHTML = 
-                `<img src="${e.target.result}" class="logo-preview" style="margin-top: 10px;">`;
-        };
-        reader.readAsDataURL(file);
-    }
-});
-
-function showServiceNameHelp() {
-    alert('Service Name Help:\n\n' +
-          'The service name is the systemd service name for your app on Linux servers.\n\n' +
-          'To find it:\n' +
-          '1. Click the "🔍 Detect" button next to the Port field to auto-detect\n' +
-          '2. Or on your server, run: sudo systemctl list-units --type=service\n' +
-          '3. Look for your app (e.g., calculator.service, quizia.service)\n' +
-          '4. Or check: ls /etc/systemd/system/*.service\n\n' +
-          'Examples:\n' +
-          '- calculator.service (for Calculator app)\n' +
-          '- quizia.service (for Quizia app)\n' +
-          '- deltabooks.service (for DeltaBooks app)\n\n' +
-          'Note: Leave blank if:\n' +
-          '- Running locally (not on Linux server)\n' +
-          '- Not using systemd\n' +
-          '- Don\'t need restart functionality\n\n' +
-          'See SERVICE_NAME_GUIDE.md for more details.');
-}
-
-async function detectServiceName() {
-    const port = document.getElementById('app-port').value;
-    if (!port) {
-        alert('Please enter a port number first');
-        return;
-    }
-    
-    const detectBtn = event.target;
-    const originalText = detectBtn.textContent;
-    detectBtn.disabled = true;
-    detectBtn.textContent = 'Detecting...';
-    
-    try {
-        const response = await fetch(`/blackgrid/admin/api/detect-service/${port}`);
-        const result = await response.json();
-        
-        if (result.success && result.service_name) {
-            document.getElementById('app-service-name').value = result.service_name;
-            alert(`✓ Detected service: ${result.service_name}`);
-        } else {
-            alert('Could not detect service name for this port.\n\n' +
-                  'This might mean:\n' +
-                  '- No service is running on this port\n' +
-                  '- Not running on Linux with systemd\n' +
-                  '- Service detection is not available\n\n' +
-                  'You can still manually enter the service name.');
-        }
-    } catch (error) {
-        alert('Error detecting service: ' + error.message);
-    } finally {
-        detectBtn.disabled = false;
-        detectBtn.textContent = originalText;
-    }
-}
-
-// Resource Manager
-let memoryChart = null;
-let diskChart = null;
-let networkChart = null;
-let resourceStatsLoading = false;
-let lastResourceStatsCall = 0;
-const RESOURCE_STATS_THROTTLE_MS = 2000; // Minimum 2 seconds between calls
-
-
-
-// Helper function to generate colors using vibrant scheme (avoid white/light colors)
-function generateTrafficColor(index) {
-    // Use muted color palette (matching screenshot colors)
-    const mutedColors = [
-        '#c57c3c', // Orange/Brown
-        '#ab62c0', // Purple
-        '#72a555', // Green
-        '#ca5670', // Red/Pink
-        '#638ccc', // Blue
-        '#8b6f47', // Brown
-        '#9d7fb8', // Light Purple
-        '#5d8a3f', // Dark Green
-        '#b84a5f', // Dark Pink
-        '#4a6ba3'  // Dark Blue
-    ];
-    return mutedColors[index % mutedColors.length];
-}
-
-async function refreshResourceStats() {
-    // Throttle: prevent calls more frequently than every 2 seconds
-    const now = Date.now();
-    if (now - lastResourceStatsCall < RESOURCE_STATS_THROTTLE_MS) {
-        console.log('Resource stats refresh throttled');
-        return;
-    }
-    
-    // Prevent duplicate simultaneous requests
-    if (resourceStatsLoading) {
-        console.log('Resource stats already loading, skipping');
-        return;
-    }
-    
-    resourceStatsLoading = true;
-    lastResourceStatsCall = now;
-    
-    try {
-        const response = await fetch('/blackgrid/admin/api/resources');
-        
-        // Check if response is OK before parsing JSON
-        if (!response.ok) {
-            // Try to get error text for debugging
-            const errorText = await response.text();
-            console.error(`Failed to load resource stats: HTTP ${response.status}`, errorText.substring(0, 200));
-            
-            // Show user-friendly error message
-            const resourceArea = document.getElementById('resource-content-area');
-            if (resourceArea) {
-                resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
-                    <p>Error loading resource stats: HTTP ${response.status}</p>
-                    <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
-                </div>`;
-            }
-            return;
-        }
-        
-        // Check content type to ensure we're getting JSON
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            const errorText = await response.text();
-            console.error('Expected JSON but got:', contentType, errorText.substring(0, 200));
-            
-            // Show user-friendly error message
-            const resourceArea = document.getElementById('resource-content-area');
-            if (resourceArea) {
-                resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
-                    <p>Error: Server returned invalid response format</p>
-                    <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
-                </div>`;
-            }
-            return;
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            updateMemoryChart(result.memory, result.apps || [], result.appmanager || null, result.breakdown || null);
-            updateDiskChart(result.disk, result.apps || [], result.appmanager || null, result.breakdown || null);
-            updateNetworkChart(result.network);
-            
-            // Resize charts after update to ensure they fit the container
-            setTimeout(() => {
-                if (memoryChart) memoryChart.resize();
-                if (diskChart) diskChart.resize();
-                if (networkChart) networkChart.resize();
-            }, 100);
-        } else {
-            console.error('Failed to load resource stats:', result.error);
-            
-            // Show user-friendly error message
-            const resourceArea = document.getElementById('resource-content-area');
-            if (resourceArea) {
-                resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
-                    <p>Error loading resource stats: ${result.error || 'Unknown error'}</p>
-                    <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
-                </div>`;
-            }
-        }
-    } catch (error) {
-        console.error('Error loading resource stats:', error);
-        
-        // Show user-friendly error message
-        const resourceArea = document.getElementById('resource-content-area');
-        if (resourceArea) {
-            resourceArea.innerHTML = `<div style="color: #dc3545; text-align: center; padding: 20px;">
-                <p>Error loading resource stats: ${error.message || 'Network error'}</p>
-                <p style="font-size: 0.9em; color: #808080;">Please try refreshing or check the console for details.</p>
-            </div>`;
-        }
-    } finally {
-        resourceStatsLoading = false;
-    }
-}
-
-function updateMemoryChart(memory, apps, appmanager, breakdown) {
-    const ctx = document.getElementById('memory-chart');
-    if (!ctx) return;
-    
-    const usedPercent = memory.percent;
-    const freePercent = 100 - usedPercent;
-    
-    // Update center text
-    const centerText = document.getElementById('memory-center-text');
-    if (centerText) {
-        centerText.innerHTML = `
-            <div style="font-size: 2.5em; font-weight: bold; color: #d4d4d4; line-height: 1.2;">${usedPercent.toFixed(2)}%</div>
-            <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(${parseFloat(memory.used_gb).toFixed(2)} GB / ${parseFloat(memory.total_gb).toFixed(2)} GB)</div>
-        `;
-    }
-    
-    // Build breakdown data for the used portion
-    const labels = [];
-    const data = [];
-    const colors = [];
-    let colorIndex = 0;
-    
-    // Add mapped apps
-    apps.forEach(app => {
-        if (app.memory_percent > 0.1) { // Only show if > 0.1%
-            labels.push(app.app_name || `App ${app.port}`);
-            data.push(app.memory_percent);
-            colors.push(generateTrafficColor(colorIndex));
-            colorIndex++;
-        }
-    });
-    
-    // Add AppManager
-    if (appmanager && appmanager.memory_percent > 0.1) {
-        labels.push('AppManager');
-        data.push(appmanager.memory_percent);
-        colors.push(generateTrafficColor(colorIndex));
-        colorIndex++;
-    }
-    
-    // Add System
-    if (breakdown && breakdown.system && breakdown.system.memory_percent > 0.1) {
-        labels.push('System');
-        data.push(breakdown.system.memory_percent);
-        colors.push(generateTrafficColor(colorIndex));
-        colorIndex++;
-    }
-    
-    // Add Other
-    if (breakdown && breakdown.other && breakdown.other.memory_percent > 0.1) {
-        labels.push('Other');
-        data.push(breakdown.other.memory_percent);
-        colors.push(generateTrafficColor(colorIndex));
-        colorIndex++;
-    }
-    
-    // Calculate remaining used (if breakdown doesn't add up to 100%)
-    const breakdownTotal = data.reduce((sum, val) => sum + val, 0);
-    if (breakdownTotal < usedPercent && usedPercent - breakdownTotal > 0.1) {
-        labels.push('Unallocated');
-        data.push(usedPercent - breakdownTotal);
-        colors.push(generateTrafficColor(colorIndex));
-        colorIndex++;
-    }
-    
-    // Add free space
-    labels.push('Free');
-    data.push(freePercent);
-    colors.push('#252526'); // Dark background color
-    
-    // Stats grid removed - no longer displaying stats below charts
-    
-    if (memoryChart) {
-        memoryChart.destroy();
-    }
-    
-    memoryChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: colors,
-                borderColor: '#1e1e1e',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'right',
-                    labels: {
-                        color: '#ffffff',
-                        padding: 10,
-                        font: {
-                            size: 11,
-                            color: '#ffffff'
-                        },
-                        generateLabels: function(chart) {
-                            const data = chart.data;
-                            if (data.labels.length && data.datasets.length) {
-                                return data.labels.map((label, i) => {
-                                    const value = data.datasets[0].data[i];
-                                    return {
-                                        text: `${label} (${value.toFixed(2)}%)`,
-                                        fillStyle: data.datasets[0].backgroundColor[i],
-                                        strokeStyle: data.datasets[0].borderColor,
-                                        lineWidth: data.datasets[0].borderWidth,
-                                        hidden: false,
-                                        index: i,
-                                        fontColor: '#ffffff',
-                                        color: '#ffffff'
-                                    };
-                                });
-                            }
-                            return [];
-                        }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed || 0;
-                            const total = memory.total_gb;
-                            const gb = (value / 100) * total;
-                            return `${label}: ${value.toFixed(2)}% (${gb.toFixed(2)} GB)`;
-                        }
-                    }
-                }
-            },
-            animation: {
-                onComplete: function() {
-                    updateMemoryCenterTextPosition(memoryChart);
-                }
-            },
-            onResize: function(chart) {
-                updateMemoryCenterTextPosition(chart);
-            }
-        }
-    });
-    
-    // Position center text on the donut, not the entire chart area (with delay to ensure chartArea is ready)
-    setTimeout(() => updateMemoryCenterTextPosition(memoryChart), 100);
-}
-
-function updateMemoryCenterTextPosition(chart) {
-    const centerText = document.getElementById('memory-center-text');
-    if (!centerText || !chart) return;
-    
-    const chartArea = chart.chartArea;
-    if (!chartArea) {
-        // If chartArea not available yet, try again after a short delay
-        setTimeout(() => updateMemoryCenterTextPosition(chart), 100);
-        return;
-    }
-    
-    const canvas = chart.canvas;
-    const container = canvas.parentElement;
-    
-    // Calculate the center of the donut chart (chartArea), not the entire canvas
-    const donutCenterX = chartArea.left + (chartArea.right - chartArea.left) / 2;
-    const donutCenterY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
-    
-    // Convert to percentage relative to canvas
-    const leftPercent = (donutCenterX / canvas.width) * 100;
-    const topPercent = (donutCenterY / canvas.height) * 100;
-    
-    centerText.style.left = `${leftPercent}%`;
-    centerText.style.top = `${topPercent}%`;
-    centerText.style.transform = 'translate(-50%, -50%)';
-}
-
-function updateDiskChart(disk, apps, appmanager, breakdown) {
-    const ctx = document.getElementById('disk-chart');
-    if (!ctx) return;
-    
-    const usedPercent = disk.percent;
-    const freePercent = 100 - usedPercent;
-    
-    // Update center text
-    const centerText = document.getElementById('disk-center-text');
-    if (centerText) {
-        centerText.innerHTML = `
-            <div style="font-size: 2.5em; font-weight: bold; color: #d4d4d4; line-height: 1.2;">${usedPercent.toFixed(2)}%</div>
-            <div style="font-size: 0.9em; color: #808080; margin-top: 5px;">(${parseFloat(disk.used_gb).toFixed(2)} GB / ${parseFloat(disk.total_gb).toFixed(2)} GB)</div>
-        `;
-    }
-    
-    // Build breakdown data for the used portion
-    const labels = [];
-    const data = [];
-    const colors = [];
-    let colorIndex = 0;
-    
-    // Add mapped apps (based on disk usage)
-    apps.forEach(app => {
-        if (app.disk_percent > 0.01) { // Only show if > 0.01%
-            labels.push(app.app_name || `App ${app.port}`);
-            data.push(app.disk_percent);
-            colors.push(generateTrafficColor(colorIndex));
-            colorIndex++;
-        }
-    });
-    
-    // Add AppManager
-    if (appmanager && appmanager.disk_percent > 0.01) {
-        labels.push('AppManager');
-        data.push(appmanager.disk_percent);
-        colors.push(generateTrafficColor(colorIndex));
-        colorIndex++;
-    }
-    
-    // Add Other (everything else)
-    if (breakdown && breakdown.other && breakdown.other.disk_percent > 0.01) {
-        labels.push('Other');
-        data.push(breakdown.other.disk_percent);
-        colors.push(generateTrafficColor(colorIndex));
-        colorIndex++;
-    }
-    
-    // Calculate remaining used (if breakdown doesn't add up to 100%)
-    const breakdownTotal = data.reduce((sum, val) => sum + val, 0);
-    if (breakdownTotal < usedPercent && usedPercent - breakdownTotal > 0.01) {
-        labels.push('Unallocated');
-        data.push(usedPercent - breakdownTotal);
-        colors.push(generateTrafficColor(colorIndex));
-        colorIndex++;
-    }
-    
-    // Add free space
-    labels.push('Free');
-    data.push(freePercent);
-    colors.push('#252526'); // Dark background color
-    
-    // Stats grid removed - no longer displaying stats below charts
-    
-    if (diskChart) {
-        diskChart.destroy();
-    }
-    
-    diskChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: colors,
-                borderColor: '#1e1e1e',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'right',
-                    labels: {
-                        color: '#ffffff',
-                        padding: 10,
-                        font: {
-                            size: 11,
-                            color: '#ffffff'
-                        },
-                        generateLabels: function(chart) {
-                            const data = chart.data;
-                            if (data.labels.length && data.datasets.length) {
-                                return data.labels.map((label, i) => {
-                                    const value = data.datasets[0].data[i];
-                                    return {
-                                        text: `${label} (${value.toFixed(2)}%)`,
-                                        fillStyle: data.datasets[0].backgroundColor[i],
-                                        strokeStyle: data.datasets[0].borderColor,
-                                        lineWidth: data.datasets[0].borderWidth,
-                                        hidden: false,
-                                        index: i,
-                                        fontColor: '#ffffff',
-                                        color: '#ffffff'
-                                    };
-                                });
-                            }
-                            return [];
-                        }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed || 0;
-                            const total = disk.total_gb;
-                            const gb = (value / 100) * total;
-                            return `${label}: ${value.toFixed(2)}% (${gb.toFixed(2)} GB)`;
-                        }
-                    }
-                }
-            },
-            animation: {
-                onComplete: function() {
-                    updateDiskCenterTextPosition(diskChart);
-                }
-            },
-            onResize: function(chart) {
-                updateDiskCenterTextPosition(chart);
-            }
-        }
-    });
-    
-    // Position center text on the donut, not the entire chart area (with delay to ensure chartArea is ready)
-    setTimeout(() => updateDiskCenterTextPosition(diskChart), 100);
-}
-
-function updateDiskCenterTextPosition(chart) {
-    const centerText = document.getElementById('disk-center-text');
-    if (!centerText || !chart) return;
-    
-    const chartArea = chart.chartArea;
-    if (!chartArea) {
-        // If chartArea not available yet, try again after a short delay
-        setTimeout(() => updateDiskCenterTextPosition(chart), 100);
-        return;
-    }
-    
-    const canvas = chart.canvas;
-    const container = canvas.parentElement;
-    
-    // Calculate the center of the donut chart (chartArea), not the entire canvas
-    const donutCenterX = chartArea.left + (chartArea.right - chartArea.left) / 2;
-    const donutCenterY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
-    
-    // Convert to percentage relative to canvas
-    const leftPercent = (donutCenterX / canvas.width) * 100;
-    const topPercent = (donutCenterY / canvas.height) * 100;
-    
-    centerText.style.left = `${leftPercent}%`;
-    centerText.style.top = `${topPercent}%`;
-    centerText.style.transform = 'translate(-50%, -50%)';
-}
-
-function updateNetworkChart(network) {
-    const ctx = document.getElementById('network-chart');
-    if (!ctx) return;
-    
-    const sentGB = network.bytes_sent_gb;
-    const recvGB = network.bytes_recv_gb;
-    const totalGB = sentGB + recvGB;
-    
-    document.getElementById('network-value').textContent = `Sent: ${parseFloat(sentGB).toFixed(2)} GB | Received: ${parseFloat(recvGB).toFixed(2)} GB`;
-    
-    // Stats grid removed - no longer displaying stats below charts
-    
-    if (networkChart) {
-        networkChart.destroy();
-    }
-    
-    networkChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['Sent', 'Received'],
-            datasets: [{
-                label: 'Network Traffic (GB)',
-                data: [sentGB, recvGB],
-                backgroundColor: ['#638ccc', '#ab62c0'],
-                borderColor: ['#638ccc', '#ab62c0'],
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(30, 30, 30, 0.95)',
-                    titleColor: '#ffffff',
-                    bodyColor: '#ffffff',
-                    borderColor: 'rgba(255, 255, 255, 0.2)',
-                    borderWidth: 1,
-                    padding: 12,
-                    titleFont: {
-                        size: 14,
-                        weight: 'bold'
-                    },
-                    bodyFont: {
-                        size: 13
-                    },
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed.y || 0;
-                            return `${label}: ${value.toFixed(2)} GB`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        color: '#d4d4d4',
-                        callback: function(value) {
-                            return value.toFixed(2) + ' GB';
-                        }
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                },
-                x: {
-                    ticks: {
-                        color: '#d4d4d4'
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                }
-            }
-        }
-    });
-}
-
-// Traffic Manager
-let dailyVisitsChart = null;
-let hourlyDistributionChart = null;
-let countriesChart = null;
-let referrersChart = null;
-let appsBreakdownChart = null;
-let trafficStatsLoading = false;
-let lastTrafficStatsCall = 0;
-const TRAFFIC_STATS_THROTTLE_MS = 5000; // Minimum 5 seconds between calls
-
-async function refreshTrafficStats() {
-    // Throttle: prevent calls more frequently than every 5 seconds
-    const now = Date.now();
-    if (now - lastTrafficStatsCall < TRAFFIC_STATS_THROTTLE_MS) {
-        console.log('Traffic stats refresh throttled');
-        return;
-    }
-    
-    // Prevent duplicate simultaneous requests
-    if (trafficStatsLoading) {
-        console.log('Traffic stats already loading, skipping');
-        return;
-    }
-    
-    trafficStatsLoading = true;
-    lastTrafficStatsCall = now;
-    
-    try {
-        // Get include_local value from checkbox
-        const includeLocalCheckbox = document.getElementById('include-local-checkbox');
-        const includeLocal = includeLocalCheckbox ? includeLocalCheckbox.checked : true;
-        
-        const response = await fetch(`/blackgrid/admin/api/traffic?days=30&include_local=${includeLocal}`);
-        const result = await response.json();
-        
-        if (result.success && result.stats) {
-            updateTrafficCharts(result.stats);
-        } else {
-            console.error('Failed to load traffic stats:', result.error);
-        }
-    } catch (error) {
-        console.error('Error loading traffic stats:', error);
-    } finally {
-        trafficStatsLoading = false;
-    }
-}
-
-function handleIncludeLocalChange() {
-    // Refresh traffic stats when checkbox changes
-    refreshTrafficStats();
-}
-
-function updateTrafficCharts(stats) {
-    // Update overall statistics
-    document.getElementById('traffic-overall-value').textContent = 
-        `${stats.total_visits.toLocaleString()} visits | ${stats.total_unique_visitors.toLocaleString()} unique visitors`;
-    
-    const overallStatsHtml = `
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Total Visits:</span>
-            <span class="resource-stat-value">${stats.total_visits.toLocaleString()}</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Unique Visitors:</span>
-            <span class="resource-stat-value">${stats.total_unique_visitors.toLocaleString()}</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Period:</span>
-            <span class="resource-stat-value">${stats.period_days} days</span>
-        </div>
-        <div class="resource-stat-item">
-            <span class="resource-stat-label">Avg Daily Visits:</span>
-            <span class="resource-stat-value">${Math.round(stats.total_visits / stats.period_days).toLocaleString()}</span>
-        </div>
-    `;
-    document.getElementById('traffic-overall-stats').innerHTML = overallStatsHtml;
-    
-    // Daily Visits Chart
-    updateDailyVisitsChart(stats.daily_visits || []);
-    
-    // Hourly Distribution Chart
-    updateHourlyDistributionChart(stats.hourly_distribution || []);
-    
-    // Countries Chart
-    updateCountriesChart(stats.top_countries || {});
-    
-    // Referrers Chart
-    updateReferrersChart(stats.top_referrers || {});
-    
-    // Apps Breakdown Chart (with stacked referrers)
-    updateAppsBreakdownChart(stats.apps || {});
-}
-
-function updateDailyVisitsChart(dailyData) {
-    const ctx = document.getElementById('daily-visits-chart');
-    if (!ctx) return;
-    
-    const labels = dailyData.map(d => {
-        const date = new Date(d.date);
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    });
-    const visits = dailyData.map(d => d.visits);
-    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
-    
-    document.getElementById('daily-visits-value').textContent = `Total: ${totalVisits.toLocaleString()} visits`;
-    
-    if (dailyVisitsChart) {
-        dailyVisitsChart.destroy();
-    }
-    
-    dailyVisitsChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Daily Visits',
-                data: visits,
-                borderColor: '#638ccc',
-                backgroundColor: 'rgba(99, 140, 204, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return `Visits: ${context.parsed.y}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        color: '#d4d4d4',
-                        stepSize: 1
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                },
-                x: {
-                    ticks: {
-                        color: '#d4d4d4',
-                        maxRotation: 45,
-                        minRotation: 45
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                }
-            }
-        }
-    });
-}
-
-function updateHourlyDistributionChart(hourlyData) {
-    const ctx = document.getElementById('hourly-distribution-chart');
-    if (!ctx) return;
-    
-    const labels = hourlyData.map(d => `${d.hour}:00`);
-    const visits = hourlyData.map(d => d.visits);
-    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
-    
-    document.getElementById('hourly-distribution-value').textContent = 
-        totalVisits > 0 ? `Total: ${totalVisits.toLocaleString()} visits today` : 'No visits today';
-    
-    if (hourlyDistributionChart) {
-        hourlyDistributionChart.destroy();
-    }
-    
-    hourlyDistributionChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Visits',
-                data: visits,
-                backgroundColor: '#ab62c0',
-                borderColor: '#ab62c0',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return `Visits: ${context.parsed.y}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        color: '#d4d4d4',
-                        stepSize: 1
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                },
-                x: {
-                    ticks: {
-                        color: '#d4d4d4'
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                }
-            }
-        }
-    });
-}
-
-function updateCountriesChart(countriesData) {
-    const ctx = document.getElementById('countries-chart');
-    if (!ctx) return;
-    
-    const countries = Object.entries(countriesData).slice(0, 10); // Top 10
-    const labels = countries.map(([country]) => country);
-    const visits = countries.map(([, count]) => count);
-    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
-    
-    document.getElementById('countries-value').textContent = 
-        `${countries.length} countries tracked`;
-    
-    if (countriesChart) {
-        countriesChart.destroy();
-    }
-    
-    if (labels.length === 0) {
-        return;
-    }
-    
-    // Use muted color palette (matching screenshot colors)
-    const mutedColors = [
-        '#c57c3c', // Orange/Brown
-        '#ab62c0', // Purple
-        '#72a555', // Green
-        '#ca5670', // Red/Pink
-        '#638ccc', // Blue
-        '#8b6f47', // Brown
-        '#9d7fb8', // Light Purple
-        '#5d8a3f', // Dark Green
-        '#b84a5f', // Dark Pink
-        '#4a6ba3'  // Dark Blue
-    ];
-    
-    const colors = [];
-    for (let i = 0; i < labels.length; i++) {
-        colors.push(mutedColors[i % mutedColors.length]);
-    }
-    
-    countriesChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: visits,
-                backgroundColor: colors,
-                borderColor: '#1e1e1e',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'right',
-                    labels: {
-                        color: '#ffffff',
-                        padding: 15,
-                        font: {
-                            size: 12,
-                            color: '#ffffff'
-                        },
-                        generateLabels: function(chart) {
-                            const data = chart.data;
-                            if (data.labels.length && data.datasets.length) {
-                                return data.labels.map((label, i) => {
-                                    const value = data.datasets[0].data[i];
-                                    const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
-                                    return {
-                                        text: `${label} (${percent}%)`,
-                                        fillStyle: data.datasets[0].backgroundColor[i],
-                                        strokeStyle: data.datasets[0].borderColor,
-                                        lineWidth: data.datasets[0].borderWidth,
-                                        hidden: false,
-                                        index: i,
-                                        fontColor: '#ffffff',
-                                        color: '#ffffff'
-                                    };
-                                });
-                            }
-                            return [];
-                        }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed || 0;
-                            const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
-                            return `${label}: ${value} visits (${percent}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function updateReferrersChart(referrersData) {
-    const ctx = document.getElementById('referrers-chart');
-    if (!ctx) return;
-    
-    // Get all referrers sorted by count
-    const allReferrers = Object.entries(referrersData).sort((a, b) => b[1] - a[1]);
-    const totalReferrerVisits = allReferrers.reduce((sum, [, count]) => sum + count, 0);
-    
-    if (allReferrers.length === 0 || totalReferrerVisits === 0) {
-        document.getElementById('referrers-value').textContent = 'No referrer data';
-        return;
-    }
-    
-    // Take top 10 individually
-    const top10 = allReferrers.slice(0, 10);
-    const others = allReferrers.slice(10);
-    
-    // Build labels and data
-    const labels = top10.map(([referrer]) => referrer || 'Direct');
-    const visits = top10.map(([, count]) => count);
-    
-    // Add "Other" category if there are more than 10 referrers
-    if (others.length > 0) {
-        const otherVisits = others.reduce((sum, [, count]) => sum + count, 0);
-        labels.push('Other');
-        visits.push(otherVisits);
-    }
-    
-    const totalVisits = visits.reduce((sum, v) => sum + v, 0);
-    
-    document.getElementById('referrers-value').textContent = 
-        `${allReferrers.length} referrers tracked`;
-    
-    if (referrersChart) {
-        referrersChart.destroy();
-    }
-    
-    // Use muted color palette (matching screenshot colors)
-    const mutedColors = [
-        '#c57c3c', // Orange/Brown
-        '#ab62c0', // Purple
-        '#72a555', // Green
-        '#ca5670', // Red/Pink
-        '#638ccc', // Blue
-        '#8b6f47', // Brown
-        '#9d7fb8', // Light Purple
-        '#5d8a3f', // Dark Green
-        '#b84a5f', // Dark Pink
-        '#4a6ba3'  // Dark Blue
-    ];
-    
-    const colors = [];
-    for (let i = 0; i < labels.length; i++) {
-        colors.push(mutedColors[i % mutedColors.length]);
-    }
-    
-    referrersChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: visits,
-                backgroundColor: colors,
-                borderColor: '#1e1e1e',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'right',
-                    labels: {
-                        color: '#e0e0e0',
-                        padding: 15,
-                        font: {
-                            size: 12,
-                            color: '#e0e0e0'
-                        },
-                        generateLabels: function(chart) {
-                            const data = chart.data;
-                            if (data.labels.length && data.datasets.length) {
-                                return data.labels.map((label, i) => {
-                                    const value = data.datasets[0].data[i];
-                                    const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
-                                    return {
-                                        text: `${label} (${percent}%)`,
-                                        fillStyle: data.datasets[0].backgroundColor[i],
-                                        strokeStyle: data.datasets[0].borderColor,
-                                        lineWidth: data.datasets[0].borderWidth,
-                                        hidden: false,
-                                        index: i,
-                                        fontColor: '#e0e0e0'
-                                    };
-                                });
-                            }
-                            return [];
-                        }
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(30, 30, 30, 0.95)',
-                    titleColor: '#e0e0e0',
-                    bodyColor: '#e0e0e0',
-                    borderColor: 'rgba(255, 255, 255, 0.2)',
-                    borderWidth: 1,
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || 'Direct';
-                            const value = context.parsed || 0;
-                            const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
-                            return `${label}: ${value} visits (${percent}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function updateAppsBreakdownChart(appsData) {
-    const ctx = document.getElementById('apps-breakdown-chart');
-    if (!ctx) return;
-    
-    const apps = Object.entries(appsData);
-    const appLabels = apps.map(([name]) => name);
-    const totalVisits = apps.reduce((sum, [, data]) => sum + (data.visits || 0), 0);
-    
-    // Collect all unique referrers across all apps
-    const allReferrers = new Set();
-    apps.forEach(([appName, appData]) => {
-        if (appData.referrers) {
-            Object.keys(appData.referrers).forEach(ref => allReferrers.add(ref));
-        }
-    });
-    
-    const referrerList = Array.from(allReferrers).sort();
-    
-    document.getElementById('apps-breakdown-value').textContent = 
-        `${apps.length} apps tracked | ${totalVisits.toLocaleString()} total visits${referrerList.length > 0 ? ` | ${referrerList.length} referrers` : ''}`;
-    
-    // Update stats grid
-    let statsHtml = '';
-    apps.forEach(([name, data]) => {
-        if (data.visits > 0) {
-            statsHtml += `
-                <div class="resource-stat-item">
-                    <span class="resource-stat-label">${name}:</span>
-                    <span class="resource-stat-value">${data.visits.toLocaleString()} visits (${data.unique_visitors} unique)</span>
-                </div>
-            `;
-        }
-    });
-    document.getElementById('apps-breakdown-stats').innerHTML = statsHtml || 
-        '<div class="resource-stat-item"><span class="resource-stat-label">No traffic data yet</span></div>';
-    
-    if (appsBreakdownChart) {
-        appsBreakdownChart.destroy();
-    }
-    
-    if (appLabels.length === 0 || totalVisits === 0) {
-        return;
-    }
-    
-    // Build datasets for each referrer (each referrer will be a stack segment)
-    // If no referrers, fall back to single dataset showing total visits
-    let datasets;
-    if (referrerList.length === 0) {
-        // No referrer data, show simple bar chart
-        const visits = apps.map(([, data]) => data.visits || 0);
-        const mutedColors = [
-            '#c57c3c', // Orange/Brown
-            '#ab62c0', // Purple
-            '#72a555', // Green
-            '#ca5670', // Red/Pink
-            '#638ccc', // Blue
-            '#8b6f47', // Brown
-            '#9d7fb8', // Light Purple
-            '#5d8a3f', // Dark Green
-            '#b84a5f', // Dark Pink
-            '#4a6ba3'  // Dark Blue
-        ];
-        const colors = [];
-        for (let i = 0; i < appLabels.length; i++) {
-            colors.push(mutedColors[i % mutedColors.length]);
-        }
-        datasets = [{
-            label: 'Visits',
-            data: visits,
-            backgroundColor: colors,
-            borderColor: colors,
-            borderWidth: 1
-        }];
-    } else {
-        // Create stacked datasets for each referrer
-        const mutedColors = [
-            '#c57c3c', // Orange/Brown
-            '#ab62c0', // Purple
-            '#72a555', // Green
-            '#ca5670', // Red/Pink
-            '#638ccc', // Blue
-            '#8b6f47', // Brown
-            '#9d7fb8', // Light Purple
-            '#5d8a3f', // Dark Green
-            '#b84a5f', // Dark Pink
-            '#4a6ba3'  // Dark Blue
-        ];
-        datasets = referrerList.map((referrer, index) => {
-            const color = mutedColors[index % mutedColors.length];
-            
-            // For each app, get the count for this referrer
-            const data = apps.map(([appName, appData]) => {
-                return appData.referrers ? (appData.referrers[referrer] || 0) : 0;
-            });
-            
-            return {
-                label: referrer || 'Direct',
-                data: data,
-                backgroundColor: color,
-                borderColor: color,
-                borderWidth: 1
-            };
-        });
-    }
-    
-    appsBreakdownChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: appLabels,
-            datasets: datasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: referrerList.length > 0,
-                    position: 'top',
-                    labels: {
-                        color: '#e0e0e0',
-                        padding: 15,
-                        font: {
-                            size: 12
-                        }
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(30, 30, 30, 0.95)',
-                    titleColor: '#e0e0e0',
-                    bodyColor: '#e0e0e0',
-                    borderColor: 'rgba(255, 255, 255, 0.2)',
-                    borderWidth: 1,
-                    callbacks: {
-                        label: function(context) {
-                            if (referrerList.length === 0) {
-                                // Simple tooltip for non-stacked chart
-                                const label = context.label || '';
-                                const value = context.parsed.y || 0;
-                                const appData = appsData[label];
-                                const percent = totalVisits > 0 ? ((value / totalVisits) * 100).toFixed(1) : 0;
-                                return `${label}: ${value} visits (${percent}%) | ${appData.unique_visitors} unique visitors`;
-                            } else {
-                                // Stacked chart tooltip
-                                const label = context.dataset.label || '';
-                                const value = context.parsed.y || 0;
-                                const appName = context.label || '';
-                                const appData = appsData[appName];
-                                const appTotal = appData.visits || 0;
-                                const percent = appTotal > 0 ? ((value / appTotal) * 100).toFixed(1) : 0;
-                                return `${label}: ${value} visits (${percent}% of ${appName})`;
-                            }
-                        },
-                        footer: function(tooltipItems) {
-                            if (referrerList.length > 0 && tooltipItems.length > 0) {
-                                const appName = tooltipItems[0].label;
-                                const appData = appsData[appName];
-                                const total = tooltipItems.reduce((sum, item) => sum + (item.parsed.y || 0), 0);
-                                return `Total: ${total} visits | ${appData.unique_visitors} unique visitors`;
-                            }
-                            return '';
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    stacked: referrerList.length > 0,
-                    ticks: {
-                        color: '#d4d4d4',
-                        stepSize: 1
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                },
-                x: {
-                    stacked: referrerList.length > 0,
-                    ticks: {
-                        color: '#d4d4d4',
-                        maxRotation: 45,
-                        minRotation: 45
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                }
-            }
-        }
-    });
-}
-
-// Admin Login Tracking
-async function refreshAdminLogins() {
-    try {
-        const response = await fetch('/blackgrid/admin/api/admin-logins');
-        const result = await response.json();
-        
-        if (result.success && result.logins) {
-            updateAdminLoginsTable(result.logins);
-        } else {
-            console.error('Failed to load admin login stats:', result.error);
-            document.getElementById('admin-logins-table-body').innerHTML = 
-                '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #ff6b6b;">Error loading login history</td></tr>';
-        }
-    } catch (error) {
-        console.error('Error loading admin login stats:', error);
-        document.getElementById('admin-logins-table-body').innerHTML = 
-            '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #ff6b6b;">Error loading login history</td></tr>';
-    }
-}
-
-function updateAdminLoginsTable(logins) {
-    const tbody = document.getElementById('admin-logins-table-body');
-    
-    if (!logins || logins.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #808080;">No login history</td></tr>';
-        return;
-    }
-    
-    let html = '';
-    logins.forEach(login => {
-        const lastLogin = login.last_login ? new Date(login.last_login).toLocaleString() : 'Never';
-        const location = login.city && login.city !== 'Unknown' && login.city !== 'Local' 
-            ? `${login.city}, ${login.country}` 
-            : login.country || 'Unknown';
-        
-        // Highlight current session
-        const rowClass = login.is_current ? 'style="background: rgba(102, 126, 234, 0.2); border-left: 3px solid #667eea;"' : '';
-        
-        html += `
-            <tr ${rowClass}>
-                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; color: #d4d4d4;">
-                    ${login.ip}
-                    ${login.is_current ? '<span style="color: #667eea; margin-left: 8px; font-size: 0.85em;">(Current Session)</span>' : ''}
-                </td>
-                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; color: #d4d4d4;">${location}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; text-align: right; color: #d4d4d4;">${login.login_count}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #2d2d2d; color: #d4d4d4;">${lastLogin}</td>
-            </tr>
-        `;
-    });
-    
-    tbody.innerHTML = html;
-}
-</script>
+<div id="dashboard-data" style="display:none"
+     data-apps='{{ apps|tojson|e }}'
+     data-msg-no-folders="{{ t('admin_dashboard.no_folders_configured')|e }}"
+     data-msg-no-env-vars="{{ t('admin_dashboard.no_env_vars_configured')|e }}"
+     data-msg-loading="{{ t('admin_dashboard.loading')|e }}"
+     data-msg-loading-discovered="{{ t('admin_dashboard.loading_discovered')|e }}"
+     data-msg-loading-ports="{{ t('admin_dashboard.loading_active_ports')|e }}"
+     data-msg-no-ports="{{ t('admin_dashboard.no_ports_found')|e }}"
+     data-msg-no-discovered="{{ t('admin_dashboard.no_discovered_apps')|e }}"
+     data-msg-error-prefix="{{ t('admin_dashboard.error_prefix')|e }}"
+     data-msg-status-started="{{ t('admin_dashboard.status_started')|e }}"
+     data-msg-status-stopped="{{ t('admin_dashboard.status_stopped')|e }}"
+     data-msg-status-starting="{{ t('admin_dashboard.status_starting')|e }}"
+     data-msg-status-stopping="{{ t('admin_dashboard.status_stopping')|e }}"
+     data-msg-menu-edit="{{ t('admin_dashboard.menu.edit')|e }}"
+     data-msg-menu-start="{{ t('admin_dashboard.menu.start')|e }}"
+     data-msg-menu-test="{{ t('admin_dashboard.menu.test')|e }}"
+     data-msg-menu-restart="{{ t('admin_dashboard.menu.restart')|e }}"
+     data-msg-menu-see-logs="{{ t('admin_dashboard.menu.see_logs')|e }}"
+     data-msg-menu-delete="{{ t('admin_dashboard.menu.delete')|e }}"></div>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}
-
-
-

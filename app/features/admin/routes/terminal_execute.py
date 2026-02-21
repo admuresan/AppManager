@@ -150,7 +150,6 @@ def execute_terminal_command():
             r"^journalctl\s",
             r"^netstat\s",
             r"^ss\s",
-            r"^sudo\s",
             r"^echo\s",
             r"^echo$",
             r"^date$",

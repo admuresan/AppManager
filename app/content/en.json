@@ -7,18 +7,10 @@
     "header_title": "Welcome to AppManager",
     "header_subtitle": "Select an application to get started",
     "docs_link": "View documentation",
-    "no_apps_title": "No apps configured yet.",
+    "no_apps_title": "No apps are currently running.",
     "no_apps_cta_prefix": "",
     "no_apps_cta_link": "Login to Admin",
     "no_apps_cta_suffix": "to add apps."
-  },
-  "proxy": {
-    "loading": {
-      "title": "Starting {app_name}...",
-      "headline": "Starting {app_name}...",
-      "body": "Please wait while we bring the app online.",
-      "subtle": "This page will refresh automatically."
-    }
   },
   "errors": {
     "app_not_found": {
@@ -120,6 +112,7 @@
     "app_details": "Port: {port} | Service: {service}",
     "menu": {
       "edit": "Edit",
+      "start": "Start",
       "test": "Test",
       "fix_configuration": "Fix Port Configuration",
       "fix_ssl": "Fix SSL",
@@ -134,7 +127,20 @@
     "loading_active_ports": "Loading active ports...",
     "server_terminal": "Server Terminal",
     "clear": "🗑️ Clear",
-    "terminal_placeholder": "Type a command and press Enter..."
+    "terminal_placeholder": "Type a command and press Enter...",
+    "no_folders_configured": "No folders configured (default: parent of AppManager)",
+    "no_env_vars_configured": "No environment variables configured",
+    "loading": "Loading...",
+    "loading_discovered": "Loading discovered apps...",
+    "loading_ports": "Loading active ports...",
+    "no_ports_found": "No active ports found or detection not available.",
+    "discovered_apps": "Discovered Apps",
+    "no_discovered_apps": "No discovered apps. Configure App Search Folders in Config (parent of AppManager by default).",
+    "error_prefix": "Error",
+    "status_started": "Started",
+    "status_stopped": "Stopped",
+    "status_starting": "Starting",
+    "status_stopping": "Stopping"
   }
 }
 
