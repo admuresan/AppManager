@@ -10,14 +10,9 @@
 </a>
 
 <div class="welcome-page">
-    <header class="welcome-header">
-        <div class="welcome-logo-wrap">
-            <img src="{{ url_for('logo') }}" alt="{{ manager_app.name }}" class="welcome-logo" onerror="this.style.display='none'">
-        </div>
-        <h1>{{ t('welcome.header_title') }}</h1>
-        <p>{{ t('welcome.header_subtitle') }}</p>
-    </header>
-    
+    <div class="welcome-logo-wrap">
+        <img src="{{ url_for('logo') }}" alt="{{ manager_app.name }}" class="welcome-logo" onerror="this.style.display='none'">
+    </div>
     <div class="apps-grid">
         <!-- Other Apps -->
         {% for app in apps %}
@@ -47,5 +42,52 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var grid = document.querySelector('.apps-grid');
+    if (!grid) return;
+
+    function balance() {
+        var cards = Array.prototype.slice.call(grid.querySelectorAll('.app-card'));
+        var n = cards.length;
+        if (n === 0) return;
+
+        var gap = 20;
+        var cardMin = 250;
+        var tileWidth = cardMin + gap;
+        var gridWidth = grid.clientWidth;
+        var m = Math.max(1, Math.floor((gridWidth + gap) / tileWidth));
+        var r = Math.ceil(n / m);
+        var c = Math.floor(n / r);
+        var o = n - c * r;
+
+        var idx = 0;
+        var rows = [];
+        for (var rowIndex = 0; rowIndex < r; rowIndex++) {
+            var count = rowIndex < o ? c + 1 : c;
+            var row = document.createElement('div');
+            row.className = 'apps-row';
+            row.style.setProperty('--cols', count);
+            for (var k = 0; k < count && idx < n; k++) {
+                row.appendChild(cards[idx++]);
+            }
+            rows.push(row);
+        }
+        grid.innerHTML = '';
+        rows.forEach(function (row) { grid.appendChild(row); });
+        grid.classList.add('apps-grid-balanced');
+    }
+
+    balance();
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(balance, 100);
+    });
+})();
+</script>
 {% endblock %}
 

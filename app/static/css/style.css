@@ -132,6 +132,22 @@ body {
     justify-items: center;
 }
 
+.apps-grid.apps-grid-balanced {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.apps-grid-balanced .apps-row {
+    display: grid;
+    grid-template-columns: repeat(var(--cols), 1fr);
+    gap: 20px;
+    justify-items: center;
+    width: 100%;
+    max-width: 100%;
+}
+
 .app-card {
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
@@ -1073,6 +1089,9 @@ body {
 /* Responsive */
 @media (max-width: 768px) {
     .apps-grid {
+        grid-template-columns: 1fr;
+    }
+    .apps-grid-balanced .apps-row {
         grid-template-columns: 1fr;
     }
     

@@ -4,8 +4,6 @@
   },
   "welcome": {
     "page_title": "Welcome - AppManager",
-    "header_title": "Welcome to AppManager",
-    "header_subtitle": "Select an application to get started",
     "docs_link": "View documentation",
     "no_apps_title": "No apps are currently running.",
     "no_apps_cta_prefix": "",
